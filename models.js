@@ -1,0 +1,150 @@
+const mongoose = require('mongoose');
+
+// ── REGISTRO (Usuario) ────────────────────────────────────────────────────────
+const registroSchema = new mongoose.Schema({
+  dip: {
+    type: String,
+    required: true,
+    unique: true,
+    uppercase: true,
+    trim: true,
+    match: /^[A-Z0-9\-]{4,20}$/
+  },
+  nombre: { type: String, required: true, trim: true },
+  apellidos: {
+    type: String,
+    trim: true,
+    required: function () { return this.rol !== 'empresa'; }
+  },
+  fechaNacimiento: {
+    type: Date,
+    required: function () { return this.rol !== 'empresa'; }
+  },
+  empresaNombre: {
+    type: String,
+    trim: true,
+    required: function () { return this.rol === 'empresa'; }
+  },
+  empresaCIF: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
+  rol: {
+    type: String,
+    enum: ['administrador', 'miembro', 'entidad', 'visitante', 'moderador', 'empresa'],
+    default: 'miembro'
+  },
+  passwordHash: { type: String, required: true },
+  totpSecret: { type: String, required: true },
+  totpVerified: { type: Boolean, default: false },
+  bloqueado: { type: Boolean, default: false },
+  intentosFallidos: { type: Number, default: 0 },
+  ultimoBloqueo: { type: Date },
+  activo: { type: Boolean, default: true },
+  creadoEn: { type: Date, default: Date.now },
+  ultimoAcceso: { type: Date },
+  propietarios: {
+    type: [
+      {
+        nombre: { type: String, required: true, trim: true },
+        apellidos: { type: String, trim: true },
+        placetaId: { type: String, required: true, uppercase: true, trim: true },
+        porcentaje: { type: Number, min: 0, max: 100, required: true }
+      }
+    ],
+    validate: [
+      {
+        validator: function (v) {
+          if (this.rol !== 'empresa') return true;
+          return Array.isArray(v) && v.length > 0;
+        },
+        message: 'Las empresas deben tener al menos un propietario con porcentaje'
+      },
+      {
+        validator: function (v) {
+          if (this.rol !== 'empresa') return true;
+          return Array.isArray(v) && v.every(p => p.placetaId && typeof p.porcentaje === 'number');
+        },
+        message: 'Cada propietario debe tener placetaId y porcentaje'
+      }
+    ]
+  }
+});
+
+// Calcular edad dinámica
+registroSchema.virtual('edad').get(function () {
+  if (!this.fechaNacimiento) return null;
+  const hoy = new Date();
+  const nac = new Date(this.fechaNacimiento);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  return edad;
+});
+
+registroSchema.set('toJSON', { virtuals: true });
+
+// ── LOG DE AUTENTICACIÓN ──────────────────────────────────────────────────────
+const logSchema = new mongoose.Schema({
+  dip: { type: String },
+  registroId: { type: mongoose.Schema.Types.ObjectId, ref: 'Registro' },
+  servicio: { type: String, required: true },      // web/servicio que solicitó acceso
+  servicioUrl: { type: String },
+  evento: {
+    type: String,
+    enum: [
+      'intento_exitoso',
+      'error_credenciales',
+      'error_2fa',
+      'cuenta_bloqueada',
+      'bloqueo_activado',
+      'desbloqueo',
+      'registro_creado',
+      'totp_configurado'
+    ],
+    required: true
+  },
+  ip: { type: String },
+  userAgent: { type: String },
+  fase: { type: String, enum: ['fase1', 'fase2', 'completa'] },
+  intentoNumero: { type: Number },
+  metadatos: { type: mongoose.Schema.Types.Mixed },
+  timestamp: { type: Date, default: Date.now }
+});
+
+logSchema.index({ dip: 1, timestamp: -1 });
+logSchema.index({ timestamp: -1 });
+
+// ── SOLICITANTE (Aplicación/Servicio) ─────────────────────────────────────────
+const solicitanteSchema = new mongoose.Schema({
+  nombre: { type: String, required: true, trim: true },
+  descripcion: { type: String, trim: true },
+  plataforma: {
+    type: String,
+    enum: ['web', 'android', 'ios', 'desktop', 'backend', 'multiplataforma'],
+    default: 'web'
+  },
+  urlOrigen: { type: String, required: true, trim: true }, // Callback principal heredado
+  redirectUris: [{ type: String, trim: true }],
+  appScheme: { type: String, trim: true },
+  packageName: { type: String, trim: true },
+  bundleId: { type: String, trim: true },
+  deepLinkHost: { type: String, trim: true },
+  pkceRequired: { type: Boolean, default: true },
+  permitirWebFallback: { type: Boolean, default: true },
+  apiKey: { type: String, required: true, unique: true }, // Clave única para validar
+  activo: { type: Boolean, default: true },
+  creadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'Registro' }, // Admin que lo creó
+  creadoEn: { type: Date, default: Date.now },
+  ultimaUsaEn: { type: Date }
+});
+
+solicitanteSchema.index({ urlOrigen: 1 });
+solicitanteSchema.index({ plataforma: 1, activo: 1 });
+
+const Registro = mongoose.model('Registro', registroSchema);
+const Log = mongoose.model('Log', logSchema);
+const Solicitante = mongoose.model('Solicitante', solicitanteSchema);
+
+module.exports = { Registro, Log, Solicitante };

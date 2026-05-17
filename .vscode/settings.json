@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /workspaces/plid26 && node server\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

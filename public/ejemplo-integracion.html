@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ejemplo de Integración — PlacetaID</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .container { max-width: 600px; width: 100%; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 20px 64px rgba(0,0,0,0.15);
+    }
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+      color: #1a202c;
+    }
+    .subtitle {
+      color: #718096;
+      margin-bottom: 2rem;
+      font-size: 0.95rem;
+    }
+    .user-info {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: none;
+    }
+    .user-info.active { display: block; }
+    .user-info h2 {
+      font-size: 0.85rem;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+    .user-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .user-row:last-child { border: none; }
+    .user-label { color: #718096; font-weight: 500; }
+    .user-value { color: #2d3748; font-weight: 600; }
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      text-align: center;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 20px rgba(102, 126, 234, 0.4);
+    }
+    .btn-danger {
+      background: #fc8181;
+      color: white;
+      margin-top: 1rem;
+    }
+    .btn-danger:hover {
+      background: #f56565;
+    }
+    .code-block {
+      background: #2d3748;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+      line-height: 1.6;
+    }
+    .status {
+      display: inline-block;
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .status.authenticated {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+    .status.unauthenticated {
+      background: #fed7d7;
+      color: #742a2a;
+    }
+    .info-box {
+      background: #ebf8ff;
+      border-left: 4px solid #4299e1;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: #2c5282;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>🔗 Ejemplo de Integración PlacetaID</h1>
+      <p class="subtitle">Aplicación de prueba para probar el flujo de autenticación</p>
+
+      <div class="info-box">
+        ℹ️ Esta página de ejemplo muestra cómo integrar PlacetaID en tu aplicación.
+      </div>
+
+      <div id="statusContainer"></div>
+
+      <div class="user-info" id="userInfo">
+        <h2>✅ Usuario autenticado</h2>
+        <div class="user-row">
+          <span class="user-label">DIP</span>
+          <span class="user-value" id="userDip">—</span>
+        </div>
+        <div class="user-row">
+          <span class="user-label">Nombre completo</span>
+          <span class="user-value" id="userName">—</span>
+        </div>
+        <div class="user-row">
+          <span class="user-label">Rol</span>
+          <span class="user-value" id="userRole">—</span>
+        </div>
+        <div class="user-row">
+          <span class="user-label">Edad</span>
+          <span class="user-value" id="userAge">—</span>
+        </div>
+      </div>
+
+      <div id="actionContainer"></div>
+
+      <div class="code-block" id="codeExample" style="display:none;">
+        <strong>Token JWT recibido:</strong><br>
+        <code id="tokenDisplay"></code>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PLACETAID_URL = 'https://id.laplaceta.org';
+    const CALLBACK_URL = `${window.location.origin}${window.location.pathname}`;
+
+    // Función para extraer parámetros de la URL
+    function getQueryParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        token: params.get('token'),
+        user: params.get('user')
+      };
+    }
+
+    // Función para manejar la redirección a PlacetaID
+    function redirectToPlacetaID() {
+      const encodedCallback = encodeURIComponent(CALLBACK_URL);
+      window.location.href = `${PLACETAID_URL}/?from=${encodedCallback}`;
+    }
+
+    // Función para limpiar la sesión
+    function logout() {
+      localStorage.removeItem('placetaidToken');
+      localStorage.removeItem('placetaidUser');
+      window.location.href = CALLBACK_URL;
+    }
+
+    // Función para renderizar la UI
+    function renderUI() {
+      let token = localStorage.getItem('placetaidToken');
+      let user = JSON.parse(localStorage.getItem('placetaidUser') || 'null');
+
+      // Si hay parámetros en la URL, guardarlos
+      const params = getQueryParams();
+      if (params.token && params.user) {
+        token = params.token;
+        user = JSON.parse(decodeURIComponent(params.user));
+
+        // Guardar en localStorage
+        localStorage.setItem('placetaidToken', token);
+        localStorage.setItem('placetaidUser', JSON.stringify(user));
+
+        // Limpiar URL
+        window.history.replaceState({}, document.title, CALLBACK_URL);
+      }
+
+      const statusContainer = document.getElementById('statusContainer');
+      const userInfo = document.getElementById('userInfo');
+      const actionContainer = document.getElementById('actionContainer');
+
+      if (token && user) {
+        // Usuario autenticado
+        statusContainer.innerHTML = '<div class="status authenticated">✅ Autenticado</div>';
+        
+        userInfo.classList.add('active');
+        document.getElementById('userDip').textContent = user.dip || '—';
+        document.getElementById('userName').textContent = user.nombreCompleto || '—';
+        document.getElementById('userRole').textContent = user.rol || '—';
+        document.getElementById('userAge').textContent = user.edad || '—';
+
+        actionContainer.innerHTML = '<button class="btn btn-danger" onclick="logout()">Cerrar sesión</button>';
+
+        // Mostrar token
+        const codeExample = document.getElementById('codeExample');
+        codeExample.style.display = 'block';
+        document.getElementById('tokenDisplay').textContent = token.substring(0, 50) + '...';
+      } else {
+        // Usuario no autenticado
+        statusContainer.innerHTML = '<div class="status unauthenticated">🔓 Sin autenticar</div>';
+        
+        userInfo.classList.remove('active');
+        actionContainer.innerHTML = '<button class="btn btn-primary" onclick="redirectToPlacetaID()">Iniciar sesión con PlacetaID</button>';
+
+        // Mostrar código de ejemplo
+        const codeExample = document.getElementById('codeExample');
+        codeExample.style.display = 'block';
+        document.getElementById('tokenDisplay').innerHTML = `
+// PlacetaID redirigirá aquí con:<br>
+?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...<br>
+&user=%7B%22dip%22%3A%22USER-001%22%2C...%7D
+        `;
+      }
+    }
+
+    // Renderizar cuando carga la página
+    document.addEventListener('DOMContentLoaded', renderUI);
+  </script>
+</body>
+</html>
