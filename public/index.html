@@ -1417,7 +1417,7 @@ textarea.form-input { resize: vertical; }
           </div>
           <div class="form-group">
             <label class="form-label">DIP — Documento de Identidad</label>
-            <input class="form-input" id="loginDip" type="text" placeholder="Ej: ADMIN-001" autocomplete="off" style="text-transform:uppercase;">
+            <input class="form-input" id="loginDip" type="text" placeholder="Ej: 12345678M" autocomplete="off" style="text-transform:uppercase;">
           </div>
           <div class="form-group">
             <label class="form-label">Contraseña</label>
@@ -1546,7 +1546,7 @@ textarea.form-input { resize: vertical; }
       <div class="filter-row">
         <div class="form-group">
           <label class="form-label">Filtrar por DIP</label>
-          <input class="form-input" id="filterDip" type="text" placeholder="Ej: ADMIN-001" style="text-transform:uppercase;font-family:var(--mono);">
+          <input class="form-input" id="filterDip" type="text" placeholder="Ej: 12345678M" style="text-transform:uppercase;font-family:var(--mono);">
         </div>
         <div class="form-group">
           <label class="form-label">Tipo de evento</label>
@@ -1867,7 +1867,7 @@ function escapeHtml(value) {
 
 // ── LOGIN FASE 1 ──────────────────────────────────────────────────────────────
 async function loginFase1() {
-  const dip = document.getElementById('loginDip').value.trim().toUpperCase();
+  const dip = document.getElementById('loginDip').value.trim().toUpperCase().replace(/[\s-]+/g, '');
   const password = document.getElementById('loginPass').value;
   const servicio = document.getElementById('loginServicio').value.trim() || 'Portal Principal';
 
@@ -2099,7 +2099,7 @@ async function toggleActivo(dip) {
 
 // ── LOGS ──────────────────────────────────────────────────────────────────────
 async function cargarLogs() {
-  const dip = document.getElementById('filterDip')?.value.trim().toUpperCase() || '';
+  const dip = document.getElementById('filterDip')?.value.trim().toUpperCase().replace(/[\s-]+/g, '') || '';
   const evento = document.getElementById('filterEvento')?.value || '';
   const params = new URLSearchParams({ limit: 100 });
   if (dip) params.set('dip', dip);

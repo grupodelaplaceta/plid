@@ -48,7 +48,7 @@ Accede en: http://localhost:3000
 5. Guarda el secreto TOTP en un lugar seguro
 
 Credenciales iniciales:
-- DIP: `ADMIN-001`
+- DIP: `00000000A`
 - Contraseña: `Admin1234!`
 - 2FA: código del autenticador
 
@@ -74,6 +74,8 @@ Body: { tokenFase2, codigo2fa }
 POST /api/registro
 Body: { dip, nombre, apellidos, fechaNacimiento, rol, password }
 → Devuelve: { dip, totpSecret, qrCode }
+
+El DIP tiene formato DNI: 8 dígitos y una letra final. La letra debe ser la inicial del nombre. Si no se envía, PLID26 lo genera automáticamente.
 
 Para empresas:
 ```
@@ -114,7 +116,7 @@ Tras autenticación exitosa, PlacetaID devuelve al servicio solicitante:
 
 ```json
 {
-  "dip": "MBR-0042",
+  "dip": "12345678J",
   "nombre": "Juan",
   "apellidos": "García López",
   "nombreCompleto": "Juan García López",

@@ -61,7 +61,7 @@ https://tu-app.com/auth/callback?token=eyJhbGc...&user=%7B%22dip%22%3A...%7D
 - `user` (JSON): Datos del usuario autenticado
   ```json
   {
-    "dip": "USER-001",
+    "dip": "12345678J",
     "nombre": "Juan",
     "apellidos": "Pérez",
     "nombreCompleto": "Juan Pérez",

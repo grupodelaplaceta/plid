@@ -8,7 +8,7 @@ const registroSchema = new mongoose.Schema({
     unique: true,
     uppercase: true,
     trim: true,
-    match: /^[A-Z0-9\-]{4,20}$/
+    match: /^\d{8}[A-Z]$/
   },
   nombre: { type: String, required: true, trim: true },
   apellidos: {

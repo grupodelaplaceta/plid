@@ -149,12 +149,43 @@ function platformLabel(platform) {
 }
 
 function normalizeDip(value) {
-  return String(value || '').trim().toUpperCase().replace(/\s+/g, '-');
+  return String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '');
 }
 
-async function generateUniqueDip(prefix = 'DIP') {
+function getDipInitial(nombre) {
+  const normalized = String(nombre || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  return normalized.match(/[A-Z]/)?.[0] || '';
+}
+
+function validateDipForName(dip, nombre) {
+  if (!/^\d{8}[A-Z]$/.test(dip)) {
+    const error = new Error('El DIP debe tener formato DNI: 8 dígitos y la inicial del nombre');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const expectedInitial = getDipInitial(nombre);
+  if (expectedInitial && dip.slice(-1) !== expectedInitial) {
+    const error = new Error(`La letra del DIP debe ser la inicial del nombre (${expectedInitial})`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+async function generateUniqueDip(nombre) {
+  const initial = getDipInitial(nombre);
+  if (!initial) {
+    const error = new Error('El nombre debe empezar por una letra para generar el DIP');
+    error.statusCode = 400;
+    throw error;
+  }
+
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = `${prefix}-${crypto.randomInt(1000, 10000)}`;
+    const candidate = `${String(crypto.randomInt(0, 100000000)).padStart(8, '0')}${initial}`;
     if (!(await Registro.exists({ dip: candidate }))) return candidate;
   }
   throw new Error('No se pudo generar DIP único');
@@ -163,7 +194,7 @@ async function generateUniqueDip(prefix = 'DIP') {
 async function createPlacetaIdRegistration(payload, context = {}) {
   const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios } = payload;
   const cleanRol = rol || 'miembro';
-  const cleanDip = normalizeDip(dip) || await generateUniqueDip(cleanRol === 'empresa' ? 'EMP' : 'DIP');
+  const cleanDip = normalizeDip(dip) || await generateUniqueDip(nombre);
 
   if (!cleanDip || !nombre || !password) {
     const error = new Error('DIP, nombre y contraseña son requeridos');
@@ -181,6 +212,7 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     error.statusCode = 400;
     throw error;
   }
+  validateDipForName(cleanDip, nombre);
 
   const existe = await Registro.findOne({ dip: cleanDip });
   if (existe) {
@@ -263,10 +295,11 @@ app.post('/api/auth/fase1', async (req, res) => {
       }
     }
 
-    const registro = await Registro.findOne({ dip: dip.toUpperCase() });
+    const cleanDip = normalizeDip(dip);
+    const registro = await Registro.findOne({ dip: cleanDip });
 
     if (!registro) {
-      await registrarLog({ dip: dip.toUpperCase(), servicio: svc, servicioUrl, evento: 'error_credenciales', ip, ua, fase: 'fase1' });
+      await registrarLog({ dip: cleanDip, servicio: svc, servicioUrl, evento: 'error_credenciales', ip, ua, fase: 'fase1' });
       return res.status(401).json({ error: 'Credenciales incorrectas' });
     }
 
@@ -481,7 +514,7 @@ app.post('/api/registro/solicitante', async (req, res) => {
 app.post('/api/registro/verificar-totp', async (req, res) => {
   const { dip, codigo } = req.body;
   try {
-    const registro = await Registro.findOne({ dip: dip?.toUpperCase() });
+    const registro = await Registro.findOne({ dip: normalizeDip(dip) });
     if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
 
     const ok = speakeasy.totp.verify({ secret: registro.totpSecret, encoding: 'base32', token: codigo?.replace(/\s/g, ''), window: 1 });
@@ -519,7 +552,7 @@ app.get('/api/admin/registros', verifyToken, requireAdmin, async (req, res) => {
 // Desbloquear cuenta
 app.post('/api/admin/desbloquear/:dip', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const registro = await Registro.findOne({ dip: req.params.dip.toUpperCase() });
+    const registro = await Registro.findOne({ dip: normalizeDip(req.params.dip) });
     if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
 
     registro.bloqueado = false;
@@ -537,7 +570,7 @@ app.post('/api/admin/desbloquear/:dip', verifyToken, requireAdmin, async (req, r
 // Activar/desactivar registro
 app.post('/api/admin/toggle/:dip', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const registro = await Registro.findOne({ dip: req.params.dip.toUpperCase() });
+    const registro = await Registro.findOne({ dip: normalizeDip(req.params.dip) });
     if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
     registro.activo = !registro.activo;
     await registro.save();
@@ -552,7 +585,7 @@ app.get('/api/admin/logs', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { dip, evento, limit = 100, page = 1 } = req.query;
     const filter = {};
-    if (dip) filter.dip = dip.toUpperCase();
+    if (dip) filter.dip = normalizeDip(dip);
     if (evento) filter.evento = evento;
 
     const logs = await Log.find(filter)
@@ -825,25 +858,26 @@ fetch('${baseUrl}/api/solicitante/info', {
 app.post('/api/setup/seed-admin', async (req, res) => {
   try {
     console.log('🔧 POST /api/setup/seed-admin - Chequeando DB connection...');
+    const adminDip = '00000000A';
     
-    const existe = await Registro.findOne({ dip: 'ADMIN-001' });
+    const existe = await Registro.findOne({ dip: adminDip });
     if (existe) {
       console.log('✓ Admin ya existe');
-      return res.json({ ok: false, mensaje: 'El admin ya existe. DIP: ADMIN-001' });
+      return res.json({ ok: false, mensaje: `El admin ya existe. DIP: ${adminDip}` });
     }
 
     const passwordHash = await bcrypt.hash('Admin1234!', 12);
-    const totp = speakeasy.generateSecret({ name: 'PlacetaID:ADMIN-001', issuer: 'Grupo de La Placeta', length: 20 });
+    const totp = speakeasy.generateSecret({ name: `PlacetaID:${adminDip}`, issuer: 'Grupo de La Placeta', length: 20 });
     const qrUrl = await QRCode.toDataURL(totp.otpauth_url);
 
     await Registro.create({
-      dip: 'ADMIN-001', nombre: 'Administrador', apellidos: 'del Sistema',
+      dip: adminDip, nombre: 'Administrador', apellidos: 'del Sistema',
       fechaNacimiento: new Date('1990-01-01'), rol: 'administrador',
       passwordHash, totpSecret: totp.base32, totpVerified: true
     });
 
     console.log('✓ Admin creado exitosamente');
-    res.json({ ok: true, dip: 'ADMIN-001', password: 'Admin1234!', totpSecret: totp.base32, qrCode: qrUrl, mensaje: '⚠️ Admin creado. Guarda el secreto TOTP y elimina este endpoint en producción.' });
+    res.json({ ok: true, dip: adminDip, password: 'Admin1234!', totpSecret: totp.base32, qrCode: qrUrl, mensaje: '⚠️ Admin creado. Guarda el secreto TOTP y elimina este endpoint en producción.' });
   } catch (err) {
     console.error('❌ Error en seed-admin:', err.message, err.code);
     res.status(500).json({ error: err.message, code: err.code });
