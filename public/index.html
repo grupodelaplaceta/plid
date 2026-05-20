@@ -373,14 +373,17 @@ body {
 
 .request-card {
   margin: -1rem 0 1rem;
-  padding: 0.78rem 0.85rem;
+  padding: 0.9rem;
   border: 1px solid rgba(63,0,216,.16);
   border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 22px rgba(63,0,216,.06);
+  background:
+    linear-gradient(135deg, rgba(63,0,216,.08), rgba(3,218,198,.08)),
+    #fff;
+  box-shadow: 0 14px 32px rgba(63,0,216,.10);
   display: flex;
   align-items: center;
   gap: .75rem;
+  justify-content: space-between;
 }
 .request-card-header {
   display: flex;
@@ -432,17 +435,26 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.request-callback {
-  max-width: 42%;
+.request-assurance {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.request-assurance span {
   padding: .48rem .62rem;
   border-radius: 999px;
-  background: rgba(63,0,216,.07);
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(63,0,216,.12);
   color: var(--primary);
   font-size: .68rem;
   font-weight: 800;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+.request-assurance span:last-child {
+  color: var(--success);
+  border-color: rgba(12,166,120,.18);
 }
 
 /* Steps */
@@ -1370,7 +1382,10 @@ textarea.form-input { resize: vertical; }
               <small id="requestServiceMeta">Identificación directa con PlacetaID</small>
             </div>
           </div>
-          <div class="request-callback" id="requestCallback">Sin redirección externa</div>
+          <div class="request-assurance" aria-label="Garantías de acceso">
+            <span id="requestPlatform">Web segura</span>
+            <span id="requestTrust">Cliente verificado</span>
+          </div>
         </div>
 
         <div class="steps">
@@ -1487,6 +1502,21 @@ textarea.form-input { resize: vertical; }
           <div class="stat-label">Errores (24h)</div>
           <div class="stat-value red" id="statErrores">—</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">Clientes autorizados</div>
+          <div class="stat-value" id="statSolicitantes">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Altas nuevas (24h)</div>
+          <div class="stat-value gold" id="statRegistrosHoy">—</div>
+        </div>
+      </div>
+
+      <div class="integration-grid" style="margin-bottom:1.25rem;">
+        <button class="integration-tile" style="text-align:left;cursor:pointer;" onclick="showView('registros')"><strong>Registros</strong><span>Buscar, bloquear o reactivar identidades.</span></button>
+        <button class="integration-tile" style="text-align:left;cursor:pointer;" onclick="showView('solicitantes')"><strong>Clientes PLID26</strong><span>API keys, callbacks y altas externas.</span></button>
+        <button class="integration-tile" style="text-align:left;cursor:pointer;" onclick="showView('logs')"><strong>Auditoría</strong><span>Revisar accesos, errores 2FA y bloqueos.</span></button>
+        <div class="integration-tile"><strong>API de altas</strong><span>POST /api/registro/solicitante con X-API-Key.</span></div>
       </div>
 
       <div class="admin-card">
@@ -1693,7 +1723,7 @@ function initials(value) {
 
 function renderSolicitanteContext(info = {}) {
   const domain = callbackLabel(redirectUrl);
-  const name = info.nombre || state.requestedServiceName || (redirectUrl ? domain : 'Portal Principal');
+  const name = info.nombre || state.requestedServiceName || 'Portal PlacetaID';
   const platform = info.plataforma || requestedPlatform || 'web';
   const description = info.descripcion || (redirectUrl
     ? 'Este servicio solicita verificar tu identidad mediante PlacetaID para iniciar sesión de forma segura.'
@@ -1708,12 +1738,14 @@ function renderSolicitanteContext(info = {}) {
   const serviceName = document.getElementById('requestServiceName');
   if (serviceName) serviceName.textContent = name;
   const meta = document.getElementById('requestServiceMeta');
-  if (meta) meta.textContent = `${platformLabel(platform)} · ${domain}`;
-  const callback = document.getElementById('requestCallback');
-  if (callback) callback.textContent = redirectUrl ? `Retorno: ${domain}` : 'Sesión local';
+  if (meta) meta.textContent = description;
+  const platformPill = document.getElementById('requestPlatform');
+  if (platformPill) platformPill.textContent = platformLabel(platform);
+  const trustPill = document.getElementById('requestTrust');
+  if (trustPill) trustPill.textContent = info.nombre ? 'Cliente verificado' : 'Verificando cliente';
   const alertContainer = document.getElementById('solicitanteAlert');
   if (alertContainer && redirectUrl) {
-    alertContainer.innerHTML = `<div class="alert alert-info"><strong>${escapeHtml(name)}</strong> solicita identificarte por PlacetaID. Al aceptar volverás a ${escapeHtml(domain)}.</div>`;
+    alertContainer.innerHTML = `<div class="alert alert-info"><strong>${escapeHtml(name)}</strong> solicita confirmar tu identidad. PlacetaID solo compartirá tu sesión tras validar DIP y 2FA.</div>`;
   }
 }
 
@@ -1732,7 +1764,9 @@ async function cargarContextoSolicitante() {
     renderSolicitanteContext(info);
   } catch {
     const alertContainer = document.getElementById('solicitanteAlert');
-    if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>Cliente no verificado.</strong> Revisa que el servicio esté registrado y activo antes de continuar.</div>';
+    const trustPill = document.getElementById('requestTrust');
+    if (trustPill) trustPill.textContent = 'Cliente pendiente';
+    if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>No se ha podido verificar el solicitante.</strong> Continúa solo si reconoces este acceso.</div>';
   }
 }
 
@@ -2008,6 +2042,8 @@ async function cargarDashboard() {
     document.getElementById('statLogs').textContent = data.logsHoy;
     document.getElementById('statExitosos').textContent = data.exitososHoy;
     document.getElementById('statErrores').textContent = data.erroresHoy;
+    document.getElementById('statSolicitantes').textContent = `${data.solicitantesActivos}/${data.solicitantes}`;
+    document.getElementById('statRegistrosHoy').textContent = data.registrosHoy;
   }
   const { ok: ok2, data: ld } = await apiFetch('/api/admin/logs?limit=10');
   if (ok2) renderLogsTable(ld.logs, 'logsPreview', true);

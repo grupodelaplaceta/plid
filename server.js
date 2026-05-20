@@ -148,6 +148,99 @@ function platformLabel(platform) {
   return labels[platform] || 'Web';
 }
 
+function normalizeDip(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '-');
+}
+
+async function generateUniqueDip(prefix = 'DIP') {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = `${prefix}-${crypto.randomInt(1000, 10000)}`;
+    if (!(await Registro.exists({ dip: candidate }))) return candidate;
+  }
+  throw new Error('No se pudo generar DIP único');
+}
+
+async function createPlacetaIdRegistration(payload, context = {}) {
+  const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios } = payload;
+  const cleanRol = rol || 'miembro';
+  const cleanDip = normalizeDip(dip) || await generateUniqueDip(cleanRol === 'empresa' ? 'EMP' : 'DIP');
+
+  if (!cleanDip || !nombre || !password) {
+    const error = new Error('DIP, nombre y contraseña son requeridos');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (cleanRol === 'empresa') {
+    if (!empresaNombre || !Array.isArray(propietarios) || propietarios.length === 0) {
+      const error = new Error('Las empresas deben incluir nombre de la empresa y al menos un propietario con placetaId y porcentaje');
+      error.statusCode = 400;
+      throw error;
+    }
+  } else if (!apellidos || !fechaNacimiento) {
+    const error = new Error('Apellidos y fecha de nacimiento son requeridos para registros personales');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existe = await Registro.findOne({ dip: cleanDip });
+  if (existe) {
+    const error = new Error('El DIP ya está registrado');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const totp = speakeasy.generateSecret({ name: `PlacetaID:${cleanDip}`, issuer: 'Grupo de La Placeta', length: 20 });
+  const registroData = {
+    dip: cleanDip,
+    nombre: String(nombre).trim(),
+    rol: cleanRol,
+    passwordHash,
+    totpSecret: totp.base32,
+    totpVerified: false
+  };
+
+  if (cleanRol === 'empresa') {
+    registroData.empresaNombre = String(empresaNombre).trim();
+    if (empresaCIF) registroData.empresaCIF = String(empresaCIF).trim().toUpperCase();
+    registroData.propietarios = propietarios.map(owner => ({
+      nombre: owner.nombre?.trim() || '',
+      apellidos: owner.apellidos?.trim(),
+      placetaId: owner.placetaId?.toUpperCase().trim(),
+      porcentaje: owner.porcentaje
+    }));
+  } else {
+    registroData.apellidos = String(apellidos).trim();
+    registroData.fechaNacimiento = new Date(fechaNacimiento);
+  }
+
+  const registro = await Registro.create(registroData);
+  await registrarLog({
+    dip: registro.dip,
+    registroId: registro._id,
+    servicio: context.servicio || 'PlacetaID',
+    servicioUrl: context.servicioUrl,
+    evento: 'registro_creado',
+    ip: context.ip,
+    ua: context.ua,
+    fase: 'completa',
+    metadatos: context.metadatos
+  });
+
+  const qrUrl = await QRCode.toDataURL(totp.otpauth_url);
+  return {
+    ok: true,
+    dip: registro.dip,
+    nombre: registro.nombre,
+    apellidos: registro.apellidos,
+    nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`.trim(),
+    rol: registro.rol,
+    totpSecret: totp.base32,
+    qrCode: qrUrl,
+    mensaje: 'Registro creado. Escanea el QR con tu autenticador y verifica el primer código.'
+  };
+}
+
 // ── API: AUTENTICACIÓN ────────────────────────────────────────────────────────
 
 // FASE 1: DIP + Contraseña
@@ -336,68 +429,51 @@ app.post('/api/auth/fase2', async (req, res) => {
 
 // ── API: REGISTRO DE NUEVO USUARIO ─────────────────────────────────────────
 app.post('/api/registro', async (req, res) => {
-  const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios } = req.body;
-  if (!dip || !nombre || !password) {
-    return res.status(400).json({ error: 'DIP, nombre y contraseña son requeridos' });
-  }
-
-  if (rol === 'empresa') {
-    if (!empresaNombre || !Array.isArray(propietarios) || propietarios.length === 0) {
-      return res.status(400).json({ error: 'Las empresas deben incluir nombre de la empresa y al menos un propietario con placetaId y porcentaje' });
-    }
-  } else {
-    if (!apellidos || !fechaNacimiento) {
-      return res.status(400).json({ error: 'Apellidos y fecha de nacimiento son requeridos para registros personales' });
-    }
-  }
-
   try {
-    const existe = await Registro.findOne({ dip: dip.toUpperCase() });
-    if (existe) return res.status(409).json({ error: 'El DIP ya está registrado' });
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const totp = speakeasy.generateSecret({ name: `PlacetaID:${dip.toUpperCase()}`, issuer: 'Grupo de La Placeta', length: 20 });
-
-    const registroData = {
-      dip: dip.toUpperCase(),
-      nombre: nombre.trim(),
-      rol: rol || 'miembro',
-      passwordHash,
-      totpSecret: totp.base32,
-      totpVerified: false
-    };
-
-    if (rol === 'empresa') {
-      registroData.empresaNombre = empresaNombre.trim();
-      if (empresaCIF) registroData.empresaCIF = empresaCIF.trim().toUpperCase();
-      registroData.propietarios = propietarios.map(owner => ({
-        nombre: owner.nombre?.trim() || '',
-        apellidos: owner.apellidos?.trim(),
-        placetaId: owner.placetaId?.toUpperCase().trim(),
-        porcentaje: owner.porcentaje
-      }));
-    } else {
-      registroData.apellidos = apellidos.trim();
-      registroData.fechaNacimiento = new Date(fechaNacimiento);
-    }
-
-    const registro = await Registro.create(registroData);
-
-    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID', evento: 'registro_creado', ip: getIP(req), ua: req.headers['user-agent'], fase: 'completa' });
-
-    const qrUrl = await QRCode.toDataURL(totp.otpauth_url);
-
-    res.status(201).json({
-      ok: true,
-      dip: registro.dip,
-      totpSecret: totp.base32,
-      qrCode: qrUrl,
-      mensaje: 'Registro creado. Escanea el QR con tu autenticador y verifica el primer código.'
+    const result = await createPlacetaIdRegistration(req.body, {
+      servicio: 'PlacetaID',
+      ip: getIP(req),
+      ua: req.headers['user-agent']
     });
-
+    res.status(201).json(result);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Error al crear el registro' });
+    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Error al crear el registro' });
+  }
+});
+
+// Alta server-to-server para portales autorizados (laplaceta.org, gdlp-web, etc.)
+app.post('/api/registro/solicitante', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || req.headers['x-placetaid-client-key'];
+    if (!apiKey) return res.status(401).json({ error: 'x-api-key requerido' });
+    const solicitante = await Solicitante.findOne({ apiKey, activo: true });
+    if (!solicitante) return res.status(401).json({ error: 'solicitante_no_autorizado' });
+
+    solicitante.ultimaUsaEn = new Date();
+    await solicitante.save();
+
+    const result = await createPlacetaIdRegistration(req.body, {
+      servicio: solicitante.nombre,
+      servicioUrl: solicitante.urlOrigen,
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      metadatos: {
+        solicitanteId: solicitante._id.toString(),
+        plataforma: solicitante.plataforma,
+        origen: req.body?.origen || 'api_solicitante'
+      }
+    });
+    res.status(201).json({
+      ...result,
+      solicitante: {
+        nombre: solicitante.nombre,
+        plataforma: solicitante.plataforma
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Error al crear el registro desde solicitante' });
   }
 });
 
@@ -500,9 +576,14 @@ app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
       Registro.countDocuments({ activo: true, bloqueado: false }),
       Log.countDocuments({ timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } })
     ]);
+    const [solicitantes, solicitantesActivos, registrosHoy] = await Promise.all([
+      Solicitante.countDocuments(),
+      Solicitante.countDocuments({ activo: true }),
+      Registro.countDocuments({ creadoEn: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } })
+    ]);
     const exitososHoy = await Log.countDocuments({ evento: 'intento_exitoso', timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } });
     const erroresHoy = await Log.countDocuments({ evento: { $in: ['error_credenciales', 'error_2fa'] }, timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } });
-    res.json({ total, bloqueados, activos, logsHoy, exitososHoy, erroresHoy });
+    res.json({ total, bloqueados, activos, logsHoy, exitososHoy, erroresHoy, solicitantes, solicitantesActivos, registrosHoy });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener estadísticas' });
   }
@@ -673,6 +754,31 @@ Si el dispositivo tiene la app instalada, el callback puede volver por deep link
 
 ### Login iOS
 Usa Universal Link o esquema propio registrado como redirect URI. El flujo devuelve los mismos parámetros que web.
+
+### API de altas PlacetaID
+Para crear una identidad desde laplaceta.org, GDLP u otro backend autorizado:
+
+\`\`\`javascript
+const res = await fetch('${baseUrl}/api/registro/solicitante', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': '${solicitante.apiKey}'
+  },
+  body: JSON.stringify({
+    nombre: 'Nombre',
+    apellidos: 'Apellidos',
+    fechaNacimiento: '1990-01-31',
+    password: 'clave-temporal-segura',
+    origen: '${solicitante.plataforma || 'web'}'
+  })
+});
+
+const alta = await res.json();
+console.log('PlacetaID creado:', alta.dip);
+\`\`\`
+
+El campo \`dip\` es opcional. Si no se envia, PLID26 generara uno automaticamente.
 
 ### 3. Capturar el callback
 \`\`\`javascript
