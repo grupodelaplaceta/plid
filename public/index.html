@@ -1582,7 +1582,7 @@ textarea.form-input { resize: vertical; }
 
       <div class="integration-grid">
         <div class="integration-tile"><strong>Web</strong><span>Callback HTTPS para portales, dashboards y tiendas.</span></div>
-        <div class="integration-tile"><strong>Android</strong><span>Deep links compatibles con apps como Banco de La Placeta.</span></div>
+        <div class="integration-tile"><strong>Android</strong><span>Deep links compatibles con cualquier app solicitante registrada.</span></div>
         <div class="integration-tile"><strong>iOS</strong><span>Universal links o esquemas propios registrados.</span></div>
         <div class="integration-tile"><strong>Backend</strong><span>Validación de cliente por API Key desde servidor.</span></div>
       </div>
@@ -1609,7 +1609,7 @@ textarea.form-input { resize: vertical; }
           <div class="two-col">
             <div class="form-group">
               <label class="form-label">Nombre del servicio *</label>
-              <input class="form-input" id="solNombre" type="text" placeholder="Ej: Banco de La Placeta">
+              <input class="form-input" id="solNombre" type="text" placeholder="Ej: Portal de socios">
             </div>
             <div class="form-group">
               <label class="form-label">Tipo de cliente</label>
@@ -1625,21 +1625,21 @@ textarea.form-input { resize: vertical; }
           </div>
           <div class="form-group">
             <label class="form-label">Callbacks autorizados *</label>
-            <textarea class="form-input" id="solRedirectUris" style="height:92px;" placeholder="https://banco.laplaceta.es/auth/callback&#10;bancoplaceta://auth/callback"></textarea>
+            <textarea class="form-input" id="solRedirectUris" style="height:92px;" placeholder="https://portal.laplaceta.org/auth/callback&#10;placetaid-demo://auth/callback"></textarea>
             <span class="form-help">Uno por línea. El callback recibido debe coincidir exactamente con uno de estos valores.</span>
           </div>
           <div class="three-col">
             <div class="form-group">
               <label class="form-label">Esquema app</label>
-              <input class="form-input" id="solAppScheme" type="text" placeholder="bancoplaceta">
+              <input class="form-input" id="solAppScheme" type="text" placeholder="placetaid-demo">
             </div>
             <div class="form-group">
               <label class="form-label">Android package</label>
-              <input class="form-input" id="solPackageName" type="text" placeholder="com.placeta.banco">
+              <input class="form-input" id="solPackageName" type="text" placeholder="org.laplaceta.portal">
             </div>
             <div class="form-group">
               <label class="form-label">iOS bundle ID</label>
-              <input class="form-input" id="solBundleId" type="text" placeholder="com.placeta.banco">
+              <input class="form-input" id="solBundleId" type="text" placeholder="org.laplaceta.portal">
             </div>
           </div>
           <div class="two-col">

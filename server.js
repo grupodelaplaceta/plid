@@ -745,7 +745,7 @@ ${loginUrl}
 
 ### Login Android / apps nativas
 Registra un callback deep link autorizado, por ejemplo:
-${solicitante.appScheme || 'bancoplaceta'}://${solicitante.deepLinkHost || 'auth/callback'}
+${solicitante.appScheme || 'placetaid-demo'}://${solicitante.deepLinkHost || 'auth/callback'}
 
 Abre PLID26 con los mismos parámetros:
 \`client_id\`, \`redirect_uri\`, \`platform=android\` y \`state\`.
