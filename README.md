@@ -72,10 +72,11 @@ Body: { tokenFase2, codigo2fa }
 
 ```
 POST /api/registro
-Body: { dip, nombre, apellidos, fechaNacimiento, rol, password }
-→ Devuelve: { dip, totpSecret, qrCode }
+Body: { dip, placeid, correo, nombre, apellidos, fechaNacimiento, rol, password }
+→ Devuelve: { dip, placeid, correo, totpSecret, qrCode, otpauthUrl }
 
 El DIP tiene formato DNI: 8 dígitos y una letra final. La letra debe ser la inicial del nombre. Si no se envía, PLID26 lo genera automáticamente.
+`placeid` y `correo` se guardan en la misma colección MongoDB del registro para poder recuperar el QR de Authenticator.
 
 Para empresas:
 ```
@@ -96,6 +97,29 @@ Body: {
 
 POST /api/registro/verificar-totp
 Body: { dip, codigo }
+```
+
+```
+POST /api/registro/recuperar-authenticator
+Body: { dip, correo? }
+→ Devuelve: { dip, placeid, correo, totpSecret, qrCode, otpauthUrl }
+
+Si el DIP esta en migraciones pendientes, devuelve `migration_requires_registration`: GDLP debe completar un alta normal con ese DIP ya asignado antes de generar el QR.
+```
+
+```
+POST /api/migraciones/pendientes
+Headers: { x-migration-key? }
+Body: { dip, placeid?, placeidAnterior?, nombre?, apellidos?, correo?, origen? }
+Body lote: { registros: [ ... ] }
+→ Guarda DIPs/PlacetaID antiguos en la lista independiente de migraciones pendientes.
+```
+
+```
+GET /api/migraciones/pendientes/:dip
+→ Devuelve: { dip, placeid, estado }
+
+GDLP usa esta consulta para bloquear el DIP/PlacetaID asignado y pedir despues los datos completos del usuario como un alta normal.
 ```
 
 ### Panel Junta (requiere token admin)

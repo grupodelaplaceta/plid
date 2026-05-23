@@ -10,6 +10,19 @@ const registroSchema = new mongoose.Schema({
     trim: true,
     match: /^\d{8}[A-Z]$/
   },
+  placeid: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    index: true
+  },
+  correo: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    index: true,
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  },
   nombre: { type: String, required: true, trim: true },
   apellidos: {
     type: String,
@@ -38,6 +51,7 @@ const registroSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   totpSecret: { type: String, required: true },
   totpVerified: { type: Boolean, default: false },
+  migradoDesdePendiente: { type: Boolean, default: false },
   bloqueado: { type: Boolean, default: false },
   intentosFallidos: { type: Number, default: 0 },
   ultimoBloqueo: { type: Date },
@@ -101,7 +115,8 @@ const logSchema = new mongoose.Schema({
       'bloqueo_activado',
       'desbloqueo',
       'registro_creado',
-      'totp_configurado'
+      'totp_configurado',
+      'totp_recuperado'
     ],
     required: true
   },
@@ -143,8 +158,41 @@ const solicitanteSchema = new mongoose.Schema({
 solicitanteSchema.index({ urlOrigen: 1 });
 solicitanteSchema.index({ plataforma: 1, activo: 1 });
 
+// ── MIGRACIONES PENDIENTES ───────────────────────────────────────────────────
+const migracionPendienteSchema = new mongoose.Schema({
+  dip: {
+    type: String,
+    required: true,
+    unique: true,
+    uppercase: true,
+    trim: true,
+    match: /^\d{8}[A-Z]$/
+  },
+  placeidAnterior: { type: String, trim: true, uppercase: true },
+  placeid: { type: String, required: true, trim: true, uppercase: true, index: true },
+  nombre: { type: String, trim: true, default: 'Miembro' },
+  apellidos: { type: String, trim: true, default: 'GDLP' },
+  correo: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  },
+  estado: {
+    type: String,
+    enum: ['pendiente', 'migrado', 'cancelado'],
+    default: 'pendiente',
+    index: true
+  },
+  origen: { type: String, trim: true, default: 'migracion_gdlp' },
+  registroId: { type: mongoose.Schema.Types.ObjectId, ref: 'Registro' },
+  creadoEn: { type: Date, default: Date.now },
+  migradoEn: { type: Date }
+});
+
 const Registro = mongoose.model('Registro', registroSchema);
 const Log = mongoose.model('Log', logSchema);
 const Solicitante = mongoose.model('Solicitante', solicitanteSchema);
+const MigracionPendiente = mongoose.model('MigracionPendiente', migracionPendienteSchema);
 
-module.exports = { Registro, Log, Solicitante };
+module.exports = { Registro, Log, Solicitante, MigracionPendiente };

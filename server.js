@@ -9,13 +9,14 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const path = require('path');
 const crypto = require('crypto');
-const { Registro, Log, Solicitante } = require('./models');
+const { Registro, Log, Solicitante, MigracionPendiente } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctbCg9KcYUrO8@cluster0.m5bntoj.mongodb.net/';
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRY = '1h'; // Tokens de duración extendida para mejor usabilidad
+const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
 
 // ── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -152,6 +153,47 @@ function normalizeDip(value) {
   return String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '');
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePlaceId(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function buildTotpUrl(dip, secret) {
+  const label = encodeURIComponent(`PlacetaID:${dip}`);
+  const issuer = encodeURIComponent('Grupo de La Placeta');
+  return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}`;
+}
+
+function newPlaceIdForDip(dip) {
+  return `PLID-${normalizeDip(dip)}`;
+}
+
+function requireMigrationImport(req, res, next) {
+  if (!MIGRATION_IMPORT_KEY) return next();
+  const key = req.headers['x-migration-key'] || req.headers['x-api-key'];
+  if (key !== MIGRATION_IMPORT_KEY) return res.status(401).json({ error: 'migration_key_required' });
+  next();
+}
+
+async function registrationQrResponse(registro, mensaje = 'QR de Authenticator recuperado.') {
+  const otpauthUrl = buildTotpUrl(registro.dip, registro.totpSecret);
+  const qrCode = await QRCode.toDataURL(otpauthUrl);
+  return {
+    ok: true,
+    dip: registro.dip,
+    placeid: registro.placeid,
+    correo: registro.correo,
+    totpSecret: registro.totpSecret,
+    qrCode,
+    otpauthUrl,
+    migradoDesdePendiente: Boolean(registro.migradoDesdePendiente),
+    mensaje
+  };
+}
+
 function getDipInitial(nombre) {
   const normalized = String(nombre || '')
     .trim()
@@ -195,9 +237,18 @@ async function createPlacetaIdRegistration(payload, context = {}) {
   const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios } = payload;
   const cleanRol = rol || 'miembro';
   const cleanDip = normalizeDip(dip) || await generateUniqueDip(nombre);
+  const pendingMigration = await MigracionPendiente.findOne({ dip: cleanDip, estado: 'pendiente' });
+  const requestedPlaceId = payload.placeid || payload.placeId || payload.place_id || payload.placetaId;
+  const cleanPlaceId = normalizePlaceId(pendingMigration?.placeid || requestedPlaceId || cleanDip);
+  const cleanCorreo = normalizeEmail(payload.correo || payload.email);
 
   if (!cleanDip || !nombre || !password) {
     const error = new Error('DIP, nombre y contraseña son requeridos');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (cleanCorreo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanCorreo)) {
+    const error = new Error('Correo inválido');
     error.statusCode = 400;
     throw error;
   }
@@ -212,7 +263,7 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     error.statusCode = 400;
     throw error;
   }
-  validateDipForName(cleanDip, nombre);
+  if (!pendingMigration) validateDipForName(cleanDip, nombre);
 
   const existe = await Registro.findOne({ dip: cleanDip });
   if (existe) {
@@ -225,6 +276,8 @@ async function createPlacetaIdRegistration(payload, context = {}) {
   const totp = speakeasy.generateSecret({ name: `PlacetaID:${cleanDip}`, issuer: 'Grupo de La Placeta', length: 20 });
   const registroData = {
     dip: cleanDip,
+    placeid: cleanPlaceId,
+    correo: cleanCorreo || undefined,
     nombre: String(nombre).trim(),
     rol: cleanRol,
     passwordHash,
@@ -247,6 +300,14 @@ async function createPlacetaIdRegistration(payload, context = {}) {
   }
 
   const registro = await Registro.create(registroData);
+  if (pendingMigration) {
+    pendingMigration.estado = 'migrado';
+    pendingMigration.registroId = registro._id;
+    pendingMigration.migradoEn = new Date();
+    await pendingMigration.save();
+    registro.migradoDesdePendiente = true;
+    await registro.save();
+  }
   await registrarLog({
     dip: registro.dip,
     registroId: registro._id,
@@ -256,19 +317,28 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     ip: context.ip,
     ua: context.ua,
     fase: 'completa',
-    metadatos: context.metadatos
+    metadatos: {
+      ...context.metadatos,
+      migracionPendiente: Boolean(pendingMigration),
+      placeidAnterior: pendingMigration?.placeidAnterior
+    }
   });
 
-  const qrUrl = await QRCode.toDataURL(totp.otpauth_url);
+  const otpauthUrl = totp.otpauth_url || buildTotpUrl(registro.dip, totp.base32);
+  const qrUrl = await QRCode.toDataURL(otpauthUrl);
   return {
     ok: true,
     dip: registro.dip,
+    placeid: registro.placeid,
+    correo: registro.correo,
     nombre: registro.nombre,
     apellidos: registro.apellidos,
     nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`.trim(),
     rol: registro.rol,
+    migradoDesdePendiente: Boolean(registro.migradoDesdePendiente),
     totpSecret: totp.base32,
     qrCode: qrUrl,
+    otpauthUrl,
     mensaje: 'Registro creado. Escanea el QR con tu autenticador y verifica el primer código.'
   };
 }
@@ -431,6 +501,8 @@ app.post('/api/auth/fase2', async (req, res) => {
     // Datos devueltos al servicio solicitante
     const datosRegistro = {
       dip: registro.dip,
+      placeid: registro.placeid,
+      correo: registro.correo,
       nombre: registro.nombre,
       apellidos: registro.apellidos,
       nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`,
@@ -472,6 +544,124 @@ app.post('/api/registro', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Error al crear el registro' });
+  }
+});
+
+// Precarga independiente de PlacetaID para migrar IDs antiguos sin tocar banco/Capitalia.
+app.post('/api/migraciones/pendientes', requireMigrationImport, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.registros) ? req.body.registros : [req.body];
+    const results = [];
+
+    for (const item of items) {
+      const dip = normalizeDip(item?.dip);
+      if (!/^\d{8}[A-Z]$/.test(dip)) {
+        results.push({ ok: false, dip: item?.dip, error: 'dip_invalido' });
+        continue;
+      }
+      const placeid = normalizePlaceId(item?.placeid || item?.placeId || item?.nuevoPlaceid || item?.nuevoPlacetaId || newPlaceIdForDip(dip));
+      const correo = normalizeEmail(item?.correo || item?.email);
+      if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+        results.push({ ok: false, dip, error: 'correo_invalido' });
+        continue;
+      }
+
+      const doc = await MigracionPendiente.findOneAndUpdate(
+        { dip },
+        {
+          $set: {
+            dip,
+            placeid,
+            placeidAnterior: normalizePlaceId(item?.placeidAnterior || item?.oldPlaceid || item?.placetaIdAnterior || ''),
+            nombre: String(item?.nombre || 'Miembro').trim(),
+            apellidos: String(item?.apellidos || 'GDLP').trim(),
+            correo: correo || undefined,
+            origen: String(item?.origen || 'migracion_gdlp').trim(),
+            estado: 'pendiente'
+          },
+          $setOnInsert: { creadoEn: new Date() }
+        },
+        { upsert: true, new: true }
+      );
+      results.push({ ok: true, dip: doc.dip, placeid: doc.placeid, estado: doc.estado });
+    }
+
+    res.status(201).json({ ok: true, total: results.length, results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al registrar migraciones pendientes' });
+  }
+});
+
+// Consulta publica para que GDLP continue un alta normal con un DIP ya asignado.
+app.get('/api/migraciones/pendientes/:dip', async (req, res) => {
+  const dip = normalizeDip(req.params?.dip);
+  if (!/^\d{8}[A-Z]$/.test(dip)) return res.status(400).json({ error: 'DIP invalido' });
+
+  try {
+    const pending = await MigracionPendiente.findOne({ dip, estado: 'pendiente' })
+      .select('dip placeid estado');
+    if (!pending) return res.status(404).json({ error: 'No hay migracion pendiente para ese DIP' });
+
+    res.json({
+      ok: true,
+      dip: pending.dip,
+      placeid: pending.placeid,
+      estado: pending.estado
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al consultar migracion pendiente' });
+  }
+});
+
+// Recuperar el QR de Authenticator de registros ya creados.
+app.post('/api/registro/recuperar-authenticator', async (req, res) => {
+  const dip = normalizeDip(req.body?.dip);
+  const correo = normalizeEmail(req.body?.correo || req.body?.email);
+
+  if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+
+  try {
+    const pending = await MigracionPendiente.findOne({ dip, estado: 'pendiente' });
+    if (pending) {
+      return res.status(409).json({
+        error: 'migration_requires_registration',
+        dip: pending.dip,
+        placeid: pending.placeid,
+        mensaje: 'Completa el alta normal de GDLP con este DIP asignado para generar el QR de Authenticator.'
+      });
+    }
+
+    const filter = correo ? { dip, correo } : { dip, migradoDesdePendiente: true };
+    const registro = await Registro.findOne(filter);
+    if (!registro) {
+      await registrarLog({
+        dip,
+        servicio: 'PlacetaID',
+        evento: 'error_credenciales',
+        ip: getIP(req),
+        ua: req.headers['user-agent'],
+        fase: 'fase1',
+        metadatos: { accion: 'recuperar_authenticator' }
+      });
+      return res.status(404).json({ error: correo ? 'No existe un registro con ese DIP y correo' : 'No hay migración pendiente para ese DIP' });
+    }
+
+    await registrarLog({
+      dip: registro.dip,
+      registroId: registro._id,
+      servicio: 'PlacetaID',
+      evento: 'totp_recuperado',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      fase: 'fase1'
+    });
+
+    res.json(await registrationQrResponse(registro, 'QR de Authenticator recuperado. Escanéalo de nuevo en tu aplicación 2FA.'));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al recuperar el autenticador' });
   }
 });
 
