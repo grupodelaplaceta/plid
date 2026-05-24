@@ -167,6 +167,53 @@ function buildTotpUrl(dip, secret) {
   return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}`;
 }
 
+const DEMO_USER = {
+  dip: '11111111D',
+  password: 'Demo1234!',
+  placeid: 'PLID-DEMO',
+  correo: 'demo@placeta.local',
+  nombre: 'Usuario',
+  apellidos: 'Demo',
+  fechaNacimiento: new Date('1995-01-01'),
+  rol: 'miembro'
+};
+
+function isDemoLogin(dip, password) {
+  return normalizeDip(dip) === DEMO_USER.dip && password === DEMO_USER.password;
+}
+
+async function ensureDemoRegistration() {
+  const passwordHash = await bcrypt.hash(DEMO_USER.password, 12);
+  const existing = await Registro.findOne({ dip: DEMO_USER.dip });
+
+  if (existing) {
+    existing.placeid = existing.placeid || DEMO_USER.placeid;
+    existing.correo = existing.correo || DEMO_USER.correo;
+    existing.nombre = existing.nombre || DEMO_USER.nombre;
+    existing.apellidos = existing.apellidos || DEMO_USER.apellidos;
+    existing.fechaNacimiento = existing.fechaNacimiento || DEMO_USER.fechaNacimiento;
+    existing.rol = existing.rol || DEMO_USER.rol;
+    existing.passwordHash = passwordHash;
+    existing.totpSecret = existing.totpSecret || speakeasy.generateSecret({ name: `PlacetaID:${DEMO_USER.dip}`, issuer: 'Grupo de La Placeta', length: 20 }).base32;
+    existing.totpVerified = false;
+    existing.twoFactorDisabled = true;
+    existing.bloqueado = false;
+    existing.intentosFallidos = 0;
+    existing.activo = true;
+    await existing.save();
+    return existing;
+  }
+
+  const totp = speakeasy.generateSecret({ name: `PlacetaID:${DEMO_USER.dip}`, issuer: 'Grupo de La Placeta', length: 20 });
+  return Registro.create({
+    ...DEMO_USER,
+    passwordHash,
+    totpSecret: totp.base32,
+    totpVerified: false,
+    twoFactorDisabled: true
+  });
+}
+
 function publicRegistroData(registro) {
   const datosRegistro = {
     dip: registro.dip,
@@ -415,7 +462,9 @@ app.post('/api/auth/fase1', async (req, res) => {
     }
 
     const cleanDip = normalizeDip(dip);
-    const registro = await Registro.findOne({ dip: cleanDip });
+    const registro = isDemoLogin(cleanDip, password)
+      ? await ensureDemoRegistration()
+      : await Registro.findOne({ dip: cleanDip });
 
     if (!registro) {
       await registrarLog({ dip: cleanDip, servicio: svc, servicioUrl, evento: 'error_credenciales', ip, ua, fase: 'fase1' });
@@ -1067,34 +1116,10 @@ fetch('${baseUrl}/api/solicitante/info', {
 app.post('/api/setup/seed-demo', async (req, res) => {
   try {
     console.log('🔧 POST /api/setup/seed-demo - Chequeando DB connection...');
-    const demoDip = '11111111D';
+    await ensureDemoRegistration();
 
-    const existe = await Registro.findOne({ dip: demoDip });
-    if (existe) {
-      console.log('✓ Demo ya existe');
-      return res.json({ ok: false, mensaje: `El usuario demo ya existe. DIP: ${demoDip}` });
-    }
-
-    const password = 'Demo1234!';
-    const passwordHash = await bcrypt.hash(password, 12);
-    const totp = speakeasy.generateSecret({ name: `PlacetaID:${demoDip}`, issuer: 'Grupo de La Placeta', length: 20 });
-
-    await Registro.create({
-      dip: demoDip,
-      placeid: 'PLID-DEMO',
-      correo: 'demo@placeta.local',
-      nombre: 'Usuario',
-      apellidos: 'Demo',
-      fechaNacimiento: new Date('1995-01-01'),
-      rol: 'miembro',
-      passwordHash,
-      totpSecret: totp.base32,
-      totpVerified: false,
-      twoFactorDisabled: true
-    });
-
-    console.log('✓ Demo creado exitosamente');
-    res.json({ ok: true, dip: demoDip, password, requiere2fa: false, mensaje: 'Usuario demo creado para desarrollo. No requiere 2FA.' });
+    console.log('✓ Demo creado/actualizado exitosamente');
+    res.json({ ok: true, dip: DEMO_USER.dip, password: DEMO_USER.password, requiere2fa: false, mensaje: 'Usuario demo creado/actualizado para desarrollo. No requiere 2FA.' });
   } catch (err) {
     console.error('❌ Error en seed-demo:', err.message, err.code);
     res.status(500).json({ error: err.message, code: err.code });
