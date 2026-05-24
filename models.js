@@ -51,6 +51,7 @@ const registroSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   totpSecret: { type: String, required: true },
   totpVerified: { type: Boolean, default: false },
+  twoFactorDisabled: { type: Boolean, default: false },
   migradoDesdePendiente: { type: Boolean, default: false },
   bloqueado: { type: Boolean, default: false },
   intentosFallidos: { type: Number, default: 0 },

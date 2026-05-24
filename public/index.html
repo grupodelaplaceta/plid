@@ -2073,6 +2073,17 @@ async function loginFase1() {
     return;
   }
 
+  if (data.tokenSesion && data.requiere2fa === false) {
+    document.getElementById('fase1Panel').style.display = 'none';
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step1').classList.add('done');
+    document.getElementById('stepNum1').textContent = '✓';
+    document.getElementById('step2').classList.add('done');
+    document.getElementById('stepNum2').textContent = '✓';
+    finishLogin(data);
+    return;
+  }
+
   state.tokenFase2 = data.tokenFase2;
   localStorage.setItem('tokenFase2', data.tokenFase2);
 
@@ -2085,35 +2096,12 @@ async function loginFase1() {
   document.getElementById('login2fa').focus();
 }
 
-// ── LOGIN FASE 2 ──────────────────────────────────────────────────────────────
-async function loginFase2() {
-  const codigo2fa = document.getElementById('login2fa').value.replace(/\s/g, '');
-  if (codigo2fa.length !== 6) return alert_('loginAlert', 'Introduce un código de 6 dígitos.');
-
-  setBtn('btnFase2', true, '');
-  alert_('loginAlert', '');
-
-  const { ok, data } = await apiFetch('/api/auth/fase2', {
-    method: 'POST',
-    body: JSON.stringify({ tokenFase2: state.tokenFase2, codigo2fa })
-  });
-
-  setBtn('btnFase2', false, 'Verificar y acceder →');
-
-  if (!ok) {
-    const extra = data.intentosRestantes !== undefined
-      ? ` <strong>Intentos restantes: ${data.intentosRestantes}</strong>` : '';
-    alert_('loginAlert', (data.error || 'Error') + extra, data.bloqueado ? 'warning' : 'error');
-    if (data.bloqueado) resetLogin();
-    return;
-  }
-
+function finishLogin(data) {
   state.tokenSesion = data.tokenSesion;
   state.user = data.registro;
   localStorage.setItem('tokenSesion', data.tokenSesion);
   localStorage.setItem('user', JSON.stringify(data.registro));
 
-  // Si hay URL de redirección, redirigir al solicitante con el token
   if (state.redirectUrl) {
     const redirectUri = new URL(state.redirectUrl);
     redirectUri.searchParams.append('placetaid_token', data.tokenSesion);
@@ -2134,17 +2122,14 @@ async function loginFase2() {
   document.getElementById('stepNum3').textContent = '✓';
 
   const reg = data.registro;
-
-  // Mostrar overlay de éxito durante 3 segundos
   const overlay = document.getElementById('successOverlay');
   const nameEl = document.getElementById('successName');
   nameEl.textContent = `Bienvenido, ${reg.nombreCompleto}`;
   overlay.classList.add('visible');
 
-  // Resetear barra para reanimar
   const bar = document.getElementById('successBar');
   bar.style.animation = 'none';
-  bar.offsetHeight; // reflow
+  bar.offsetHeight;
   bar.style.animation = 'fillBar 3s linear forwards';
 
   setTimeout(() => {
@@ -2174,6 +2159,32 @@ async function loginFase2() {
       document.getElementById('nav-logout').style.display = '';
     }
   }, 3000);
+}
+
+// ── LOGIN FASE 2 ──────────────────────────────────────────────────────────────
+async function loginFase2() {
+  const codigo2fa = document.getElementById('login2fa').value.replace(/\s/g, '');
+  if (codigo2fa.length !== 6) return alert_('loginAlert', 'Introduce un código de 6 dígitos.');
+
+  setBtn('btnFase2', true, '');
+  alert_('loginAlert', '');
+
+  const { ok, data } = await apiFetch('/api/auth/fase2', {
+    method: 'POST',
+    body: JSON.stringify({ tokenFase2: state.tokenFase2, codigo2fa })
+  });
+
+  setBtn('btnFase2', false, 'Verificar y acceder →');
+
+  if (!ok) {
+    const extra = data.intentosRestantes !== undefined
+      ? ` <strong>Intentos restantes: ${data.intentosRestantes}</strong>` : '';
+    alert_('loginAlert', (data.error || 'Error') + extra, data.bloqueado ? 'warning' : 'error');
+    if (data.bloqueado) resetLogin();
+    return;
+  }
+
+  finishLogin(data);
 }
 
 function irAlPanel() { showView('dashboard'); }

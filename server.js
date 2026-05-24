@@ -167,6 +167,55 @@ function buildTotpUrl(dip, secret) {
   return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}`;
 }
 
+function publicRegistroData(registro) {
+  const datosRegistro = {
+    dip: registro.dip,
+    placeid: registro.placeid,
+    correo: registro.correo,
+    nombre: registro.nombre,
+    apellidos: registro.apellidos,
+    nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`,
+    edad: registro.edad,
+    rol: registro.rol,
+    accesoComo: registro.rol === 'empresa' ? 'empresa' : 'persona'
+  };
+
+  if (registro.rol === 'empresa') {
+    datosRegistro.empresaNombre = registro.empresaNombre;
+    datosRegistro.propietarios = registro.propietarios;
+  }
+
+  return datosRegistro;
+}
+
+async function completeLogin(registro, payload, req, fase = 'completa') {
+  const ip = getIP(req);
+  const ua = req.headers['user-agent'];
+
+  registro.intentosFallidos = 0;
+  registro.ultimoAcceso = new Date();
+  await registro.save();
+
+  await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'intento_exitoso', ip, ua, fase });
+
+  const tokenSesion = jwt.sign(
+    { registroId: registro._id.toString(), dip: registro.dip, rol: registro.rol },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRY }
+  );
+
+  return {
+    ok: true,
+    tokenSesion,
+    registro: publicRegistroData(registro),
+    servicio: payload.servicio,
+    plataforma: payload.platform || 'web',
+    state: payload.state || null,
+    expiresIn: 3600,
+    requiere2fa: false
+  };
+}
+
 function newPlaceIdForDip(dip) {
   return `PLID-${normalizeDip(dip)}`;
 }
@@ -399,6 +448,16 @@ app.post('/api/auth/fase1', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales incorrectas', intentosRestantes: 3 - intentos });
     }
 
+    if (registro.twoFactorDisabled) {
+      const loginPayload = {
+        servicio: solicitante?.nombre || svc,
+        servicioUrl,
+        platform: platform || solicitante?.plataforma || 'web',
+        state: oauthState || null
+      };
+      return res.json(await completeLogin(registro, loginPayload, req, 'completa_sin_2fa'));
+    }
+
     // Fase 1 OK — emitir token temporal para fase 2
     const tokenFase2 = jwt.sign(
       {
@@ -484,47 +543,7 @@ app.post('/api/auth/fase2', async (req, res) => {
       return res.status(401).json({ error: 'Código 2FA incorrecto', intentosRestantes: 3 - intentos });
     }
 
-    // AUTENTICACIÓN COMPLETA ✅
-    registro.intentosFallidos = 0;
-    registro.ultimoAcceso = new Date();
-    await registro.save();
-
-    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'intento_exitoso', ip, ua, fase: 'completa' });
-
-    // Token de sesión con datos del registro
-    const tokenSesion = jwt.sign(
-      { registroId: registro._id.toString(), dip: registro.dip, rol: registro.rol },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRY }
-    );
-
-    // Datos devueltos al servicio solicitante
-    const datosRegistro = {
-      dip: registro.dip,
-      placeid: registro.placeid,
-      correo: registro.correo,
-      nombre: registro.nombre,
-      apellidos: registro.apellidos,
-      nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`,
-      edad: registro.edad,
-      rol: registro.rol,
-      accesoComo: registro.rol === 'empresa' ? 'empresa' : 'persona'
-    };
-
-    if (registro.rol === 'empresa') {
-      datosRegistro.empresaNombre = registro.empresaNombre;
-      datosRegistro.propietarios = registro.propietarios;
-    }
-
-    res.json({
-      ok: true,
-      tokenSesion,
-      registro: datosRegistro,
-      servicio: payload.servicio,
-      plataforma: payload.platform || 'web',
-      state: payload.state || null,
-      expiresIn: 3600
-    });
+    res.json(await completeLogin(registro, payload, req));
 
   } catch (err) {
     console.error(err);
@@ -1045,6 +1064,43 @@ fetch('${baseUrl}/api/solicitante/info', {
 });
 
 // ── SEED ADMIN (solo en desarrollo) ──────────────────────────────────────────
+app.post('/api/setup/seed-demo', async (req, res) => {
+  try {
+    console.log('🔧 POST /api/setup/seed-demo - Chequeando DB connection...');
+    const demoDip = '11111111D';
+
+    const existe = await Registro.findOne({ dip: demoDip });
+    if (existe) {
+      console.log('✓ Demo ya existe');
+      return res.json({ ok: false, mensaje: `El usuario demo ya existe. DIP: ${demoDip}` });
+    }
+
+    const password = 'Demo1234!';
+    const passwordHash = await bcrypt.hash(password, 12);
+    const totp = speakeasy.generateSecret({ name: `PlacetaID:${demoDip}`, issuer: 'Grupo de La Placeta', length: 20 });
+
+    await Registro.create({
+      dip: demoDip,
+      placeid: 'PLID-DEMO',
+      correo: 'demo@placeta.local',
+      nombre: 'Usuario',
+      apellidos: 'Demo',
+      fechaNacimiento: new Date('1995-01-01'),
+      rol: 'miembro',
+      passwordHash,
+      totpSecret: totp.base32,
+      totpVerified: false,
+      twoFactorDisabled: true
+    });
+
+    console.log('✓ Demo creado exitosamente');
+    res.json({ ok: true, dip: demoDip, password, requiere2fa: false, mensaje: 'Usuario demo creado para desarrollo. No requiere 2FA.' });
+  } catch (err) {
+    console.error('❌ Error en seed-demo:', err.message, err.code);
+    res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
 app.post('/api/setup/seed-admin', async (req, res) => {
   try {
     console.log('🔧 POST /api/setup/seed-admin - Chequeando DB connection...');
