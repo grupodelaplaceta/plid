@@ -275,8 +275,18 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
 
   await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'intento_exitoso', ip, ua, fase });
 
+  const datosRegistro = publicRegistroData(registro);
   const tokenSesion = jwt.sign(
-    { registroId: registro._id.toString(), dip: registro.dip, rol: registro.rol },
+    {
+      registroId: registro._id.toString(),
+      dip: registro.dip,
+      rol: registro.rol,
+      nombre: datosRegistro.nombre,
+      apellidos: datosRegistro.apellidos,
+      nombreCompleto: datosRegistro.nombreCompleto,
+      edad: datosRegistro.edad,
+      accesoComo: datosRegistro.accesoComo
+    },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
   );
@@ -284,7 +294,7 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
   return {
     ok: true,
     tokenSesion,
-    registro: publicRegistroData(registro),
+    registro: datosRegistro,
     servicio: payload.servicio,
     plataforma: payload.platform || 'web',
     state: payload.state || null,
