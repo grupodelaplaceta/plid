@@ -17,6 +17,8 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctb
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRY = '1h'; // Tokens de duración extendida para mejor usabilidad
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
+const ADMIN_DESKTOP_CLIENT_ID = process.env.PLACETAID_ADMIN_DESKTOP_CLIENT_ID || 'administracion-gdlp';
+const ADMIN_DESKTOP_CALLBACK = process.env.PLACETAID_ADMIN_DESKTOP_CALLBACK || 'http://127.0.0.1:18731/callback';
 const BUILTIN_PENDING_MIGRATIONS = [
   {
     dip: '20521220S',
@@ -24,6 +26,19 @@ const BUILTIN_PENDING_MIGRATIONS = [
     nombre: 'Miembro',
     apellidos: 'GDLP',
     origen: 'migracion_gdlp'
+  }
+];
+const BUILTIN_SOLICITANTES = [
+  {
+    nombre: 'Administracion GDLP',
+    descripcion: 'Aplicacion de escritorio oficial para administracion bancaria y PlacetaID.',
+    plataforma: 'desktop',
+    urlOrigen: ADMIN_DESKTOP_CALLBACK,
+    redirectUris: [ADMIN_DESKTOP_CALLBACK],
+    apiKey: ADMIN_DESKTOP_CLIENT_ID,
+    activo: true,
+    pkceRequired: false,
+    permitirWebFallback: false
   }
 ];
 
@@ -75,6 +90,7 @@ async function connectToDatabase() {
     isConnected = true;
     console.log(`✅ MongoDB conectado`);
     await ensureBuiltinPendingMigrations();
+    await ensureBuiltinSolicitantes();
   } catch (err) {
     console.error('❌ Error MongoDB:', err.message);
     console.error('   Code:', err.code);
@@ -118,6 +134,31 @@ async function ensureBuiltinPendingMigrations() {
           apellidos: item.apellidos,
           origen: item.origen,
           estado: 'pendiente',
+          creadoEn: new Date()
+        }
+      },
+      { upsert: true }
+    );
+  }
+}
+
+async function ensureBuiltinSolicitantes() {
+  for (const item of BUILTIN_SOLICITANTES) {
+    await Solicitante.updateOne(
+      { apiKey: item.apiKey },
+      {
+        $set: {
+          nombre: item.nombre,
+          descripcion: item.descripcion,
+          plataforma: item.plataforma,
+          urlOrigen: item.urlOrigen,
+          redirectUris: item.redirectUris,
+          activo: item.activo,
+          pkceRequired: item.pkceRequired,
+          permitirWebFallback: item.permitirWebFallback
+        },
+        $setOnInsert: {
+          apiKey: item.apiKey,
           creadoEn: new Date()
         }
       },
