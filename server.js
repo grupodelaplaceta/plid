@@ -167,6 +167,14 @@ async function ensureBuiltinSolicitantes() {
   }
 }
 
+async function findActiveSolicitante(apiKey) {
+  const key = String(apiKey || '').trim();
+  if (!key) return null;
+  const dbSolicitante = await Solicitante.findOne({ apiKey: key, activo: true });
+  if (dbSolicitante) return dbSolicitante;
+  return BUILTIN_SOLICITANTES.find(item => item.apiKey === key && item.activo) || null;
+}
+
 function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
   console.log('Auth header:', auth);
@@ -534,7 +542,7 @@ app.post('/api/auth/fase1', async (req, res) => {
   try {
     let solicitante = null;
     if (clientId) {
-      solicitante = await Solicitante.findOne({ apiKey: clientId, activo: true });
+      solicitante = await findActiveSolicitante(clientId);
       if (!solicitante) return res.status(401).json({ error: 'Aplicación solicitante no autorizada' });
       const callbacks = normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris);
       if (servicioUrl && !isAllowedCallback(servicioUrl, callbacks)) {
@@ -1041,11 +1049,13 @@ app.get('/api/solicitante/info', async (req, res) => {
   if (!key) return res.status(401).json({ error: 'API Key requerida' });
 
   try {
-    const solicitante = await Solicitante.findOne({ apiKey: key, activo: true });
+    const solicitante = await findActiveSolicitante(key);
     if (!solicitante) return res.status(401).json({ error: 'API Key inválida o inactiva' });
     
-    solicitante.ultimaUsaEn = new Date();
-    await solicitante.save();
+    if (typeof solicitante.save === 'function') {
+      solicitante.ultimaUsaEn = new Date();
+      await solicitante.save();
+    }
     
     res.json({
       nombre: solicitante.nombre,
