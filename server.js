@@ -530,6 +530,17 @@ async function createPlacetaIdRegistration(payload, context = {}) {
 
 // ── API: AUTENTICACIÓN ────────────────────────────────────────────────────────
 
+app.get('/api/auth/session', verifyToken, async (req, res) => {
+  try {
+    const registro = await Registro.findById(req.user.registroId);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (!registro.activo || registro.bloqueado) return res.status(403).json({ error: 'Registro no activo' });
+    res.json({ ok: true, registro: publicRegistroData(registro) });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al validar sesión' });
+  }
+});
+
 // FASE 1: DIP + Contraseña
 app.post('/api/auth/fase1', async (req, res) => {
   const { dip, password, servicio, servicioUrl, clientId, platform, state: oauthState, codeChallenge } = req.body;
