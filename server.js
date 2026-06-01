@@ -17,6 +17,15 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctb
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRY = '1h'; // Tokens de duración extendida para mejor usabilidad
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
+const BUILTIN_PENDING_MIGRATIONS = [
+  {
+    dip: '20521220S',
+    placeid: 'PLID-20521220S',
+    nombre: 'Miembro',
+    apellidos: 'GDLP',
+    origen: 'migracion_gdlp'
+  }
+];
 
 // ── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -65,6 +74,7 @@ async function connectToDatabase() {
 
     isConnected = true;
     console.log(`✅ MongoDB conectado`);
+    await ensureBuiltinPendingMigrations();
   } catch (err) {
     console.error('❌ Error MongoDB:', err.message);
     console.error('   Code:', err.code);
@@ -93,6 +103,26 @@ async function registrarLog(data) {
     await Log.create(data);
   } catch (e) {
     console.error('Error guardando log:', e);
+  }
+}
+
+async function ensureBuiltinPendingMigrations() {
+  for (const item of BUILTIN_PENDING_MIGRATIONS) {
+    await MigracionPendiente.updateOne(
+      { dip: item.dip },
+      {
+        $setOnInsert: {
+          dip: item.dip,
+          placeid: item.placeid,
+          nombre: item.nombre,
+          apellidos: item.apellidos,
+          origen: item.origen,
+          estado: 'pendiente',
+          creadoEn: new Date()
+        }
+      },
+      { upsert: true }
+    );
   }
 }
 
@@ -1168,9 +1198,8 @@ app.use((req, res) => {
 // ── INICIAR SERVIDOR ──────────────────────────────────────────────────────────
 // En desarrollo local, executar: npm start
 if (require.main === module) {
-  mongoose.connect(MONGO_URI)
+  connectToDatabase()
     .then(() => {
-      console.log('✅ Conectado a MongoDB');
       app.listen(PORT, () => {
         console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       });
