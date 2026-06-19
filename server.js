@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctbCg9KcYUrO8@cluster0.m5bntoj.mongodb.net/';
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
-const JWT_EXPIRY = '1h'; // Tokens de duración extendida para mejor usabilidad
+const JWT_EXPIRY = '5d'; // Tokens de 5 días según requerimiento
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
 const ADMIN_DESKTOP_CLIENT_ID = process.env.PLACETAID_ADMIN_DESKTOP_CLIENT_ID || 'administracion-gdlp';
 const ADMIN_DESKTOP_CALLBACK = process.env.PLACETAID_ADMIN_DESKTOP_CALLBACK || 'http://127.0.0.1:18731/callback';
@@ -177,13 +177,33 @@ async function findActiveSolicitante(apiKey) {
 
 function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
-  console.log('Auth header:', auth);
   if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token requerido' });
   const token = auth.slice(7);
-  console.log('Token:', token);
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    console.log('User:', req.user);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+
+    // Renovación automática: si el token tiene más de 1 día, emitimos uno nuevo en el header
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.iat && (now - decoded.iat) > 24 * 60 * 60) {
+      const newToken = jwt.sign(
+        {
+          registroId: decoded.registroId,
+          dip: decoded.dip,
+          rol: decoded.rol,
+          nombre: decoded.nombre,
+          apellidos: decoded.apellidos,
+          nombreCompleto: decoded.nombreCompleto,
+          edad: decoded.edad,
+          accesoComo: decoded.accesoComo
+        },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRY }
+      );
+      res.setHeader('X-New-Token', newToken);
+      res.setHeader('Access-Control-Expose-Headers', 'X-New-Token');
+    }
+
     next();
   } catch (err) {
     console.log('JWT Error:', err.message);
@@ -347,7 +367,7 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
     servicio: payload.servicio,
     plataforma: payload.platform || 'web',
     state: payload.state || null,
-    expiresIn: 3600,
+    expiresIn: 5 * 24 * 60 * 60,
     requiere2fa: false
   };
 }
