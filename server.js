@@ -89,6 +89,7 @@ async function connectToDatabase() {
 
     isConnected = true;
     console.log(`✅ MongoDB conectado`);
+    await backfillSupportNumbers();
     await ensureBuiltinPendingMigrations();
     await ensureBuiltinSolicitantes();
   } catch (err) {
@@ -266,6 +267,27 @@ function buildTotpUrl(dip, secret) {
   return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}`;
 }
 
+async function generateUniqueSupportNumber() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidate = String(crypto.randomInt(10000000, 100000000));
+    if (!(await Registro.exists({ supportNumber: candidate }))) return candidate;
+  }
+  throw new Error('No se pudo generar un número de soporte único');
+}
+
+async function backfillSupportNumbers() {
+  try {
+    const users = await Registro.find({ supportNumber: { $exists: false } });
+    for (const user of users) {
+      user.supportNumber = await generateUniqueSupportNumber();
+      await user.save();
+      console.log(`Backfilled support number ${user.supportNumber} for user ${user.nombre}`);
+    }
+  } catch (err) {
+    console.error('Error backfilling support numbers:', err);
+  }
+}
+
 const DEMO_USER = {
   dip: '11111111D',
   password: 'Demo1234!',
@@ -274,7 +296,8 @@ const DEMO_USER = {
   nombre: 'Usuario',
   apellidos: 'Demo',
   fechaNacimiento: new Date('1995-01-01'),
-  rol: 'miembro'
+  rol: 'miembro',
+  supportNumber: '11111111'
 };
 
 function isDemoLogin(dip, password) {
@@ -315,15 +338,21 @@ async function ensureDemoRegistration() {
 
 function publicRegistroData(registro) {
   const datosRegistro = {
-    dip: registro.dip,
+    dip: registro.dip || null,
     placeid: registro.placeid,
     correo: registro.correo,
     nombre: registro.nombre,
     apellidos: registro.apellidos,
-    nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`,
+    nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`.trim(),
     edad: registro.edad,
     rol: registro.rol,
-    accesoComo: registro.rol === 'empresa' ? 'empresa' : 'persona'
+    accesoComo: registro.rol === 'empresa' ? 'empresa' : 'persona',
+    supportNumber: registro.supportNumber,
+    points: registro.points || 0,
+    banned: registro.banned || registro.bloqueado || false,
+    bannedUntil: registro.bannedUntil || null,
+    socialLoginType: registro.socialLoginType || null,
+    socialLoginId: registro.socialLoginId || null
   };
 
   if (registro.rol === 'empresa') {
@@ -342,19 +371,23 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
   registro.ultimoAcceso = new Date();
   await registro.save();
 
-  await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'intento_exitoso', ip, ua, fase });
+  await registrarLog({ dip: registro.dip || registro.supportNumber, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'intento_exitoso', ip, ua, fase });
 
   const datosRegistro = publicRegistroData(registro);
   const tokenSesion = jwt.sign(
     {
       registroId: registro._id.toString(),
-      dip: registro.dip,
+      dip: registro.dip || null,
       rol: registro.rol,
       nombre: datosRegistro.nombre,
       apellidos: datosRegistro.apellidos,
       nombreCompleto: datosRegistro.nombreCompleto,
       edad: datosRegistro.edad,
-      accesoComo: datosRegistro.accesoComo
+      accesoComo: datosRegistro.accesoComo,
+      supportNumber: datosRegistro.supportNumber,
+      points: datosRegistro.points,
+      banned: datosRegistro.banned,
+      bannedUntil: datosRegistro.bannedUntil
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
@@ -479,6 +512,7 @@ async function createPlacetaIdRegistration(payload, context = {}) {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const totp = speakeasy.generateSecret({ name: `PlacetaID:${cleanDip}`, issuer: 'Grupo de La Placeta', length: 20 });
+  const supportNumber = await generateUniqueSupportNumber();
   const registroData = {
     dip: cleanDip,
     placeid: cleanPlaceId,
@@ -487,7 +521,8 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     rol: cleanRol,
     passwordHash,
     totpSecret: totp.base32,
-    totpVerified: false
+    totpVerified: false,
+    supportNumber
   };
 
   if (cleanRol === 'empresa') {
@@ -535,6 +570,7 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     ok: true,
     dip: registro.dip,
     placeid: registro.placeid,
+    supportNumber: registro.supportNumber,
     correo: registro.correo,
     nombre: registro.nombre,
     apellidos: registro.apellidos,
@@ -905,6 +941,175 @@ app.post('/api/registro/verificar-totp', async (req, res) => {
     res.json({ ok: true, mensaje: 'Autenticador configurado correctamente. Ya puedes iniciar sesión.' });
   } catch (err) {
     res.status(500).json({ error: 'Error al verificar' });
+  }
+});
+
+// Alta externa vía Social Login
+app.post('/api/auth/social-register', async (req, res) => {
+  const { socialLoginType, socialLoginId, nombre, correo } = req.body;
+  if (!socialLoginType || !socialLoginId || !nombre) {
+    return res.status(400).json({ error: 'socialLoginType, socialLoginId y nombre son requeridos' });
+  }
+  try {
+    const existe = await Registro.findOne({ socialLoginType, socialLoginId });
+    if (existe) {
+      return res.status(409).json({ error: 'Esta cuenta social ya está registrada' });
+    }
+    const supportNumber = await generateUniqueSupportNumber();
+    const placeid = `PLID-${supportNumber}`;
+    const registro = await Registro.create({
+      supportNumber,
+      placeid,
+      nombre,
+      correo: correo ? normalizeEmail(correo) : undefined,
+      socialLoginType,
+      socialLoginId,
+      rol: 'visitante'
+    });
+    await registrarLog({
+      dip: registro.supportNumber,
+      registroId: registro._id,
+      servicio: 'PlacetaID Social Register',
+      evento: 'registro_creado',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      metadatos: { socialLoginType, socialLoginId }
+    });
+    res.status(201).json({
+      ok: true,
+      supportNumber: registro.supportNumber,
+      placeid: registro.placeid,
+      nombre: registro.nombre,
+      rol: registro.rol,
+      mensaje: 'Registro social completado'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al registrar usuario social' });
+  }
+});
+
+// Login vía Social Login
+app.post('/api/auth/social-login', async (req, res) => {
+  const { supportNumber, socialLoginType, socialLoginId, servicio, servicioUrl, platform, state: oauthState } = req.body;
+  if (!supportNumber || !socialLoginType || !socialLoginId) {
+    return res.status(400).json({ error: 'supportNumber, socialLoginType y socialLoginId son requeridos' });
+  }
+  try {
+    const registro = await Registro.findOne({ supportNumber });
+    if (!registro) {
+      return res.status(401).json({ error: 'Número de soporte no encontrado' });
+    }
+    if (registro.socialLoginType !== socialLoginType || registro.socialLoginId !== socialLoginId) {
+      return res.status(401).json({ error: 'La cuenta social no coincide con el número de soporte' });
+    }
+    if (registro.bloqueado) {
+      if (registro.bannedUntil && new Date(registro.bannedUntil) < new Date()) {
+        registro.bloqueado = false;
+        registro.banned = false;
+        registro.bannedUntil = null;
+        await registro.save();
+      } else {
+        return res.status(403).json({ error: 'Cuenta bloqueada/baneada', bloqueado: true });
+      }
+    }
+    const loginPayload = {
+      servicio: servicio || 'Desconocido',
+      servicioUrl,
+      platform: platform || 'web',
+      state: oauthState || null
+    };
+    res.json(await completeLogin(registro, loginPayload, req));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al iniciar sesión' });
+  }
+});
+
+// Vincular DIP en el futuro
+app.post('/api/registro/link-dip', async (req, res) => {
+  const { supportNumber, dip, password, email } = req.body;
+  if (!supportNumber || !dip || !password) {
+    return res.status(400).json({ error: 'supportNumber, dip y contraseña son requeridos' });
+  }
+  try {
+    const registro = await Registro.findOne({ supportNumber });
+    if (!registro) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (registro.dip) return res.status(400).json({ error: 'Este usuario ya tiene un DIP vinculado' });
+
+    const cleanDip = normalizeDip(dip);
+    const dipExiste = await Registro.exists({ dip: cleanDip });
+    if (dipExiste) return res.status(409).json({ error: 'El DIP ya está registrado en otra cuenta' });
+
+    validateDipForName(cleanDip, registro.nombre);
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const totp = speakeasy.generateSecret({ name: `PlacetaID:${cleanDip}`, issuer: 'Grupo de La Placeta', length: 20 });
+
+    registro.dip = cleanDip;
+    registro.passwordHash = passwordHash;
+    registro.totpSecret = totp.base32;
+    registro.totpVerified = false;
+    registro.twoFactorDisabled = false;
+    if (email) registro.correo = normalizeEmail(email);
+
+    await registro.save();
+
+    await registrarLog({
+      dip: registro.dip,
+      registroId: registro._id,
+      servicio: 'PlacetaID Link DIP',
+      evento: 'totp_configurado',
+      ip: getIP(req),
+      ua: req.headers['user-agent']
+    });
+
+    const otpauthUrl = totp.otpauth_url || buildTotpUrl(registro.dip, totp.base32);
+    const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+    res.json({
+      ok: true,
+      dip: registro.dip,
+      totpSecret: totp.base32,
+      qrCode,
+      otpauthUrl,
+      mensaje: 'DIP vinculado correctamente. Escanea el código QR de Authenticator.'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Error al vincular DIP' });
+  }
+});
+
+// Banear indefinidamente o hasta x fecha
+app.post('/api/admin/ban', verifyToken, requireAdmin, async (req, res) => {
+  const { dip, supportNumber, banned, bannedUntil } = req.body;
+  try {
+    const query = dip ? { dip: normalizeDip(dip) } : { supportNumber };
+    const registro = await Registro.findOne(query);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+
+    registro.bloqueado = Boolean(banned);
+    registro.banned = Boolean(banned);
+    registro.bannedUntil = bannedUntil ? new Date(bannedUntil) : null;
+    await registro.save();
+
+    await registrarLog({
+      dip: registro.dip || registro.supportNumber,
+      registroId: registro._id,
+      servicio: 'PlacetaID Admin',
+      evento: banned ? 'bloqueo_activado' : 'desbloqueado',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      metadatos: { banStatus: banned, bannedUntil, bannedPor: req.user.dip }
+    });
+
+    res.json({
+      ok: true,
+      mensaje: `Registro ${registro.dip || registro.supportNumber} actualizado (banned: ${banned})`
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al procesar sanción / ban' });
   }
 });
 

@@ -4,8 +4,9 @@ const mongoose = require('mongoose');
 const registroSchema = new mongoose.Schema({
   dip: {
     type: String,
-    required: true,
+    required: false,
     unique: true,
+    sparse: true,
     uppercase: true,
     trim: true,
     match: /^\d{8}[A-Z]$/
@@ -27,11 +28,11 @@ const registroSchema = new mongoose.Schema({
   apellidos: {
     type: String,
     trim: true,
-    required: function () { return this.rol !== 'empresa'; }
+    required: function () { return this.rol !== 'empresa' && this.dip; }
   },
   fechaNacimiento: {
     type: Date,
-    required: function () { return this.rol !== 'empresa'; }
+    required: function () { return this.rol !== 'empresa' && this.dip; }
   },
   empresaNombre: {
     type: String,
@@ -48,8 +49,8 @@ const registroSchema = new mongoose.Schema({
     enum: ['administrador', 'miembro', 'entidad', 'visitante', 'moderador', 'empresa'],
     default: 'miembro'
   },
-  passwordHash: { type: String, required: true },
-  totpSecret: { type: String, required: true },
+  passwordHash: { type: String, required: false },
+  totpSecret: { type: String, required: false },
   totpVerified: { type: Boolean, default: false },
   twoFactorDisabled: { type: Boolean, default: false },
   migradoDesdePendiente: { type: Boolean, default: false },
@@ -58,6 +59,34 @@ const registroSchema = new mongoose.Schema({
   ultimoBloqueo: { type: Date },
   activo: { type: Boolean, default: true },
   creadoEn: { type: Date, default: Date.now },
+  ultimoAcceso: { type: Date },
+  supportNumber: {
+    type: String,
+    required: true,
+    unique: true,
+    match: /^\d{8}$/
+  },
+  points: {
+    type: Number,
+    default: 0
+  },
+  banned: {
+    type: Boolean,
+    default: false
+  },
+  bannedUntil: {
+    type: Date,
+    default: null
+  },
+  socialLoginType: {
+    type: String,
+    trim: true
+  },
+  socialLoginId: {
+    type: String,
+    trim: true,
+    index: true
+  },
   ultimoAcceso: { type: Date },
   propietarios: {
     type: [
