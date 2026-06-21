@@ -89,6 +89,15 @@ async function connectToDatabase() {
 
     isConnected = true;
     console.log(`✅ MongoDB conectado`);
+
+    // Drop legacy non-sparse supportNumber index so mongoose can recreate it as sparse
+    try {
+      await mongoose.connection.db.collection('registros').dropIndex('supportNumber_1');
+      console.log('Dropped old non-sparse supportNumber_1 index');
+    } catch (e) {
+      // Index did not exist or was already dropped, which is fine
+    }
+
     await backfillSupportNumbers();
     await ensureBuiltinPendingMigrations();
     await ensureBuiltinSolicitantes();
@@ -277,11 +286,20 @@ async function generateUniqueSupportNumber() {
 
 async function backfillSupportNumbers() {
   try {
-    const users = await Registro.find({ supportNumber: { $exists: false } });
+    const users = await Registro.find({
+      $or: [
+        { supportNumber: { $exists: false } },
+        { supportNumber: null }
+      ]
+    });
     for (const user of users) {
-      user.supportNumber = await generateUniqueSupportNumber();
-      await user.save();
-      console.log(`Backfilled support number ${user.supportNumber} for user ${user.nombre}`);
+      try {
+        user.supportNumber = await generateUniqueSupportNumber();
+        await user.save();
+        console.log(`Backfilled support number ${user.supportNumber} for user ${user.nombre}`);
+      } catch (saveErr) {
+        console.error(`Error saving user ${user.nombre} during backfill:`, saveErr.message);
+      }
     }
   } catch (err) {
     console.error('Error backfilling support numbers:', err);
