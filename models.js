@@ -62,8 +62,9 @@ const registroSchema = new mongoose.Schema({
   ultimoAcceso: { type: Date },
   supportNumber: {
     type: String,
-    required: true,
+    required: false,
     unique: true,
+    sparse: true,
     match: /^\d{8}$/
   },
   points: {

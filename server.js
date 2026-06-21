@@ -367,6 +367,15 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
   const ip = getIP(req);
   const ua = req.headers['user-agent'];
 
+  if (!registro.supportNumber) {
+    try {
+      registro.supportNumber = await generateUniqueSupportNumber();
+      console.log(`On-the-fly backfilled support number ${registro.supportNumber} for user ${registro.nombre} during login`);
+    } catch (err) {
+      console.error('Error generating unique support number on the fly:', err);
+    }
+  }
+
   registro.intentosFallidos = 0;
   registro.ultimoAcceso = new Date();
   await registro.save();
