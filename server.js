@@ -1511,7 +1511,7 @@ app.post('/api/setup/seed-admin', async (req, res) => {
 
 // ── SERVIR FRONTEND ───────────────────────────────────────────────────────────
 app.get('/favicon.ico', (req, res) => {
-  res.status(204).end();
+  res.sendFile(path.join(__dirname, 'public', 'assets', 'faviid.png'));
 });
 
 // Catch-all for SPA
