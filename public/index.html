@@ -9,34 +9,41 @@
 <style>
 :root {
   /* ── Brand Purple ── */
-  --primary: #3f00d8;
+  --primary: #3F00D8;
   --primary-light: #5a1fe8;
   --primary-dark: #2d00a8;
   --primary-glow: rgba(63, 0, 216, 0.2);
 
-  /* ── Semantic ── */
-  --success: #059669;
-  --success-soft: rgba(5, 150, 105, 0.1);
-  --warning: #d97706;
-  --warning-soft: rgba(217, 119, 6, 0.1);
-  --error: #dc2626;
-  --error-soft: rgba(220, 38, 38, 0.1);
-  --info: #0284c7;
-  --info-soft: rgba(2, 132, 199, 0.1);
+  /* ── Semantic (Banco de La Placeta brand) ── */
+  --success: #00A884;
+  --success-soft: rgba(0, 168, 132, 0.1);
+  --warning: #FFB300;
+  --warning-soft: rgba(255, 179, 0, 0.12);
+  --error: #E00022;
+  --error-soft: rgba(224, 0, 34, 0.1);
+  --info: #3F00D8;
+  --info-soft: rgba(63, 0, 216, 0.08);
+  --gold: #FFB300;
+  --gold-soft: rgba(255, 179, 0, 0.12);
+  --mint: #00A884;
+  --mint-soft: rgba(0, 168, 132, 0.1);
+  --income-green: #00A651;
+  --income-green-soft: rgba(0, 166, 81, 0.1);
 
-  /* ── Neutrals (light formal) ── */
+  /* ── Neutrals ── */
   --background: #f4f2fb;
   --surface: #ffffff;
-  --surface-2: #eeebf9;
+  --surface-2: #EEEBF9;
   --surface-hover: #e6e1f7;
   --border: #d8d2f0;
   --border-strong: #bab2e0;
-  --border-focus: #3f00d8;
+  --border-focus: #3F00D8;
 
   /* ── Text ── */
-  --text: #130a2e;
-  --text-secondary: #3d3060;
-  --text-muted: #8878b8;
+  --text: #000000;
+  --text-secondary: #4C4057;
+  --text-muted: #6C5878;
+  --text-dim: #8878B8;
   --text-on-primary: #ffffff;
 
   /* ── Shadows ── */
@@ -48,21 +55,20 @@
   --p200: #c4b5fd;
   --p300: #7c5ee8;
   --p400: #5a1fe8;
-  --p500: #3f00d8;
+  --p500: #3F00D8;
   --p600: #2d00a8;
   --p700: #200080;
   --p800: #160060;
   --glow: rgba(63,0,216,0.35);
-  --green: #059669;
-  --green-soft: rgba(5,150,105,0.1);
-  --red: #dc2626;
-  --red-soft: rgba(220,38,38,0.1);
-  --blue: #0284c7;
-  --blue-soft: rgba(2,132,199,0.1);
-  --amber: #d97706;
-  --amber-soft: rgba(217,119,6,0.1);
-  --text-soft: #3d3060;
-  --text-dim: #8878b8;
+  --green: #00A884;
+  --green-soft: rgba(0,168,132,0.1);
+  --red: #E00022;
+  --red-soft: rgba(224,0,34,0.1);
+  --blue: #3F00D8;
+  --blue-soft: rgba(63,0,216,0.08);
+  --amber: #FFB300;
+  --amber-soft: rgba(255,179,0,0.12);
+  --text-soft: #4C4057;
   --border-bright: #7c5ee8;
 
   /* ── Tokens ── */
@@ -130,8 +136,8 @@ body {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px);
+    linear-gradient(rgba(63,0,216,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,0,216,0.04) 1px, transparent 1px);
   background-size: 52px 52px;
 }
 
@@ -281,7 +287,7 @@ body {
 .nav-item.active {
   color: var(--primary);
   border-left-color: var(--primary);
-  background: linear-gradient(90deg, rgba(124,58,237,0.1) 0%, rgba(124,58,237,0.03) 100%);
+  background: linear-gradient(90deg, rgba(63,0,216,0.1) 0%, rgba(63,0,216,0.03) 100%);
   font-weight: 600;
 }
 .nav-item .nav-icon {
@@ -496,12 +502,12 @@ body {
   box-shadow: 0 0 0 4px var(--primary-glow);
 }
 .step.done .step-num {
-  border-color: var(--success);
-  background: var(--success-soft);
-  color: var(--success);
+  border-color: var(--mint);
+  background: var(--mint-soft);
+  color: var(--mint);
 }
 .step.active { color: var(--primary); font-weight: 600; }
-.step.done { color: var(--success); }
+.step.done { color: var(--mint); }
 
 .step-connector {
   height: 2px;
@@ -581,7 +587,7 @@ body {
 .form-input::placeholder { color: var(--text-muted); font-weight: 400; }
 .form-input:focus {
   border-color: var(--primary);
-  background: rgba(124,58,237,0.03);
+  background: rgba(63,0,216,0.03);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
 .form-input.error {
@@ -607,7 +613,7 @@ body {
 .totp-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 4px var(--primary-glow);
-  background: rgba(124,58,237,0.04);
+  background: rgba(63,0,216,0.04);
 }
 
 select.form-input { cursor: pointer; }
@@ -635,14 +641,14 @@ textarea.form-input { resize: vertical; }
 .btn-primary {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-light) 100%);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(124,58,237,0.35), 0 1px 0 rgba(255,255,255,0.15) inset;
+  box-shadow: 0 4px 14px rgba(63,0,216,0.35), 0 1px 0 rgba(255,255,255,0.15) inset;
 }
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 22px rgba(124,58,237,0.45);
+  box-shadow: 0 8px 22px rgba(63,0,216,0.45);
   filter: brightness(1.06);
 }
-.btn-primary:active { transform: translateY(0); box-shadow: 0 2px 8px rgba(124,58,237,0.3); }
+.btn-primary:active { transform: translateY(0); box-shadow: 0 2px 8px rgba(63,0,216,0.3); }
 
 .btn-ghost {
   background: transparent;
@@ -663,9 +669,9 @@ textarea.form-input { resize: vertical; }
 .btn-danger:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
 .btn-gold {
-  background: linear-gradient(135deg, var(--warning) 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #FFB300 0%, #FFC107 100%);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(217,119,6,0.3);
+  box-shadow: 0 4px 14px rgba(255,179,0,0.35);
 }
 .btn-gold:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
@@ -691,9 +697,9 @@ textarea.form-input { resize: vertical; }
   line-height: 1.5;
 }
 .alert-error { background: var(--error-soft); border: 1px solid rgba(220,38,38,0.2); color: var(--error); }
-.alert-success { background: var(--success-soft); border: 1px solid rgba(5,150,105,0.2); color: var(--success); }
-.alert-info { background: var(--info-soft); border: 1px solid rgba(2,132,199,0.2); color: var(--info); }
-.alert-warning { background: var(--warning-soft); border: 1px solid rgba(217,119,6,0.2); color: var(--warning); }
+.alert-success { background: var(--mint-soft); border: 1px solid rgba(0,168,132,0.2); color: var(--mint); }
+.alert-info { background: var(--info-soft); border: 1px solid rgba(63,0,216,0.18); color: var(--primary); }
+.alert-warning { background: var(--gold-soft); border: 1px solid rgba(255,179,0,0.25); color: var(--gold); }
 
 /* Gateway result */
 .gateway-result {
@@ -737,7 +743,7 @@ textarea.form-input { resize: vertical; }
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--primary);
-  background: rgba(124,58,237,0.07);
+  background: rgba(63,0,216,0.07);
   border: 1px solid var(--border);
   padding: 0.45rem 0.85rem;
   border-radius: 6px;
@@ -814,8 +820,8 @@ textarea.form-input { resize: vertical; }
   line-height: 1;
 }
 .stat-value.red { color: var(--error); }
-.stat-value.green { color: var(--success); }
-.stat-value.gold { color: var(--warning); }
+.stat-value.green { color: var(--mint); }
+.stat-value.gold { color: var(--gold); }
 
 /* Admin cards */
 .admin-card {
@@ -1095,10 +1101,10 @@ textarea.form-input { resize: vertical; }
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.badge-blue { background: var(--info-soft); color: var(--info); border: 1px solid rgba(2,132,199,0.2); }
-.badge-green { background: var(--success-soft); color: var(--success); border: 1px solid rgba(5,150,105,0.2); }
+.badge-blue { background: var(--info-soft); color: var(--primary); border: 1px solid rgba(63,0,216,0.2); }
+.badge-green { background: var(--mint-soft); color: var(--mint); border: 1px solid rgba(0,168,132,0.2); }
 .badge-red { background: var(--error-soft); color: var(--error); border: 1px solid rgba(220,38,38,0.2); }
-.badge-gold { background: var(--warning-soft); color: var(--warning); border: 1px solid rgba(217,119,6,0.2); }
+.badge-gold { background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(255,179,0,0.25); }
 .badge-gray { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
 
 /* Log events */
@@ -1109,20 +1115,20 @@ textarea.form-input { resize: vertical; }
   font-weight: 500;
 }
 .log-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.log-dot.success { background: var(--success); box-shadow: 0 0 6px rgba(5,150,105,0.5); }
-.log-dot.error { background: var(--error); box-shadow: 0 0 6px rgba(220,38,38,0.5); }
-.log-dot.warning { background: var(--warning); box-shadow: 0 0 6px rgba(217,119,6,0.5); }
-.log-dot.info { background: var(--info); box-shadow: 0 0 6px rgba(2,132,199,0.5); }
+.log-dot.success { background: var(--mint); box-shadow: 0 0 6px rgba(0,168,132,0.5); }
+.log-dot.error { background: var(--error); box-shadow: 0 0 6px rgba(224,0,34,0.5); }
+.log-dot.warning { background: var(--gold); box-shadow: 0 0 6px rgba(255,179,0,0.5); }
+.log-dot.info { background: var(--primary); box-shadow: 0 0 6px rgba(63,0,216,0.5); }
 
 /* Mono info pill */
 .mono-info {
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--primary);
-  background: rgba(124,58,237,0.07);
+  background: rgba(63,0,216,0.07);
   padding: 0.25rem 0.65rem;
   border-radius: 6px;
-  border: 1px solid rgba(124,58,237,0.15);
+  border: 1px solid rgba(63,0,216,0.15);
   display: inline-block;
 }
 
@@ -1163,7 +1169,7 @@ textarea.form-input { resize: vertical; }
 .spinner {
   display: inline-block;
   width: 16px; height: 16px;
-  border: 2px solid rgba(124,58,237,0.2);
+  border: 2px solid rgba(63,0,216,0.2);
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.65s linear infinite;
@@ -1253,7 +1259,7 @@ textarea.form-input { resize: vertical; }
 }
 .success-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary-dark), var(--primary-light));
+  background: linear-gradient(90deg, var(--mint), var(--income-green));
   border-radius: 10px;
   width: 0%;
   animation: fillBar 3s linear forwards;
@@ -1628,7 +1634,7 @@ textarea.form-input { resize: vertical; }
         <!-- Resultado -->
         <div class="glass-card" id="resultPanel" style="display:none">
           <div class="card-gif-header">
-            <div class="card-heading" style="color:var(--success);">✓ Acceso concedido</div>
+            <div class="card-heading" style="color:var(--mint);">✓ Acceso concedido</div>
           </div>
           <div class="alert alert-success" id="resultAlert"></div>
           <div class="gateway-result" id="gatewayOutput"></div>
@@ -2527,3 +2533,4 @@ async function eliminarSolicitante(id) {
 </script>
 </body>
 </html>
+
