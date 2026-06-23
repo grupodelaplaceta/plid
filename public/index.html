@@ -158,6 +158,11 @@ body {
 }
 .app.admin-mode .header { display: flex; }
 
+/* Mobile menu button — hidden by default on desktop */
+.mobile-menu-btn {
+  display: none;
+}
+
 .header-brand {
   display: flex;
   align-items: center;
@@ -1292,9 +1297,22 @@ textarea.form-input { resize: vertical; }
 }
 
 
+/* ══ MOBILE SIDEBAR OVERLAY ══ */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: rgba(19,10,46,0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.sidebar-overlay.open { display: block; }
+
 /* ══ RESPONSIVE 900px ══ */
 @media (max-width: 900px) {
   .sidebar { display: none !important; }
+  .app.admin-mode .sidebar.mobile-open { display: flex !important; z-index: 101; }
   .app.admin-mode .main { margin-left: 0; padding: 1.25rem; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .admin-hero { grid-template-columns: 1fr; }
@@ -1306,10 +1324,43 @@ textarea.form-input { resize: vertical; }
   .data-table { font-size: .75rem; }
   .data-table thead th,
   .data-table td { padding: .5rem .6rem; }
+  .data-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .modal-panel { max-width: 98%; padding: 1rem; border-radius: 14px; }
   .admin-hero-badge { min-width: 100px; padding: .5rem .8rem; font-size: .8rem; }
   .filter-row { flex-direction: column; align-items: stretch; }
   .filter-row .form-group { min-width: 0; }
+  .integration-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Mobile hamburger button */
+  .mobile-menu-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border: none; background: var(--surface-2);
+    border-radius: 8px; cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .mobile-menu-btn:hover { background: var(--surface-hover); color: var(--primary); }
+}
+
+/* ══ TABLET (641px – 899px) ══ */
+@media (min-width: 641px) and (max-width: 899px) {
+  .login-wrap { max-width: 420px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .client-metrics { grid-template-columns: repeat(2, 1fr); }
+  .integration-grid { grid-template-columns: repeat(2, 1fr); }
+  .main { padding: 1.5rem; }
+  .app.admin-mode .main { padding: calc(62px + 1.5rem) 1.5rem 1.5rem; }
+  .glass-card { padding: 1.5rem; }
+  .stat-value { font-size: 1.8rem; }
+  .login-logo .brand { font-size: 1.9rem; }
+  .admin-hero h1 { font-size: 1.35rem; }
+  .data-table { font-size: .78rem; }
 }
 
 /* ══ RESPONSIVE 640px (móvil) ══ */
@@ -1428,6 +1479,14 @@ textarea.form-input { resize: vertical; }
     padding: .7rem .85rem;
     font-size: .82rem;
   }
+  /* Allow inline button groups on mobile */
+  .btn:not(.btn-full) + .btn:not(.btn-full) { margin-top: 0; }
+  .btn-group-mobile {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .btn-group-mobile .btn { flex: 1; min-width: 0; }
 
   /* ── Alert ── */
   .alert {
@@ -1463,15 +1522,27 @@ textarea.form-input { resize: vertical; }
   .header-brand { width: auto; min-width: 0; padding: 0 .6rem; border-right: 0; }
   .header-tag,
   .header-pill { display: none; }
+  .mobile-menu-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border: none; background: transparent;
+    border-radius: 8px; cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    margin-right: 0;
+    flex-shrink: 0;
+  }
 
   /* ── Admin mode ── */
-  .app.admin-mode .main { margin-left: 0; padding: 62px 8px 18px; }
+  .app.admin-mode .main { margin-left: 0; padding: 62px 6px 18px; }
 
   /* ── Admin cards ── */
   .admin-card,
   .stat-card,
   .integration-tile { border-radius: 11px; }
-  .admin-card { padding: .85rem; overflow-x: auto; }
+  .admin-card { padding: .75rem; overflow-x: auto; }
   .admin-card-title { font-size: .74rem; }
 
   /* ── Page header ── */
@@ -1479,7 +1550,7 @@ textarea.form-input { resize: vertical; }
   .page-header h1,
   .admin-hero h1 { font-size: clamp(1.2rem, 7vw, 1.5rem); letter-spacing: 0; }
   .page-header p { font-size: .78rem; }
-  .admin-hero { padding: .85rem; gap: .6rem; border-radius: 14px; }
+  .admin-hero { padding: .75rem; gap: .6rem; border-radius: 14px; }
   .admin-hero-badge { min-width: 80px; padding: .4rem .6rem; font-size: .7rem; }
 
   /* ── Grids → single column ── */
@@ -1489,7 +1560,7 @@ textarea.form-input { resize: vertical; }
   .client-grid { grid-template-columns: 1fr; }
 
   /* ── Stats ── */
-  .stat-card { padding: 1rem 1.1rem; }
+  .stat-card { padding: .85rem 1rem; }
   .stat-label { font-size: .58rem; }
   .stat-value { font-size: 1.6rem; }
 
@@ -1498,6 +1569,16 @@ textarea.form-input { resize: vertical; }
   .data-table thead th,
   .data-table td { padding: .4rem .5rem; }
   .admin-card .data-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-card .data-table::before {
+    content: '← Desliza para ver más →';
+    display: block;
+    text-align: center;
+    font-size: .6rem;
+    color: var(--text-dim);
+    padding-bottom: .35rem;
+    letter-spacing: .05em;
+    font-family: var(--mono);
+  }
 
   /* ── Modal ── */
   .modal-panel { max-width: 100%; margin: .5rem; padding: .85rem; border-radius: 14px; max-height: 92vh; }
@@ -1507,6 +1588,9 @@ textarea.form-input { resize: vertical; }
   .client-card { padding: .75rem; }
   .client-metric { padding: .75rem; }
   .client-metric strong { font-size: 1.4rem; }
+  .client-card-head { flex-direction: column; }
+  .client-card-actions { flex-direction: column; }
+  .client-card-actions .btn { width: 100%; }
 
   /* ── Integration tiles ── */
   .integration-tile { padding: .75rem; }
@@ -1523,6 +1607,40 @@ textarea.form-input { resize: vertical; }
 
   /* ── Monospace info ── */
   .mono-info { font-size: .65rem; padding: .2rem .5rem; }
+
+  /* ── Log event rows ── */
+  .log-event { flex-wrap: wrap; }
+
+  /* ── Checkbox rows ── */
+  .checkbox-row { font-size: .78rem; }
+}
+
+/* ══ EXTRA SMALL (≤400px) — pantallas muy pequeñas ══ */
+@media (max-width: 400px) {
+  .main { padding: 10px 4px 18px; }
+  .glass-card { padding: .7rem; border-radius: 9px; }
+  .login-logo .brand { font-size: clamp(1.25rem, 8vw, 1.6rem); }
+  .login-logo { margin-bottom: .6rem; }
+  .request-card { padding: .5rem; }
+  .request-app-icon { width: 32px; height: 32px; font-size: .72rem; border-radius: 9px; }
+  .request-title strong { font-size: .82rem; }
+  .request-assurance span { flex: 1 1 100%; font-size: .6rem; padding: .28rem .4rem; }
+  .step { font-size: .68rem; min-height: 32px; padding: .3rem .45rem; }
+  .stat-value { font-size: 1.35rem; }
+  .stat-card { padding: .7rem .75rem; }
+  .admin-card { padding: .65rem; }
+  .admin-hero { padding: .65rem; }
+  .client-metric strong { font-size: 1.2rem; }
+  .data-table { font-size: .65rem; }
+  .data-table thead th,
+  .data-table td { padding: .3rem .35rem; }
+  .btn { font-size: .78rem; min-height: 40px; padding: .6rem .7rem; }
+  .form-input { font-size: 16px; padding: .6rem .65rem; min-height: 42px; }
+  .totp-input { min-height: 46px; font-size: clamp(1.2rem, 7vw, 1.5rem); }
+  .success-title { font-size: 1.1rem; }
+  .success-subtitle { font-size: .75rem; }
+  .modal-panel { margin: .35rem; padding: .65rem; }
+  .badge { font-size: .55rem; padding: .16rem .5rem; }
 }
 </style>
 </head>
@@ -1552,9 +1670,12 @@ textarea.form-input { resize: vertical; }
 
 <!-- Header (admin only) -->
 <header class="header">
-  <div class="header-brand">
-    <div class="header-logo">Placeta<em>ID</em></div>
-    <div class="header-tag">v1.0</div>
+  <div style="display:flex;align-items:center;gap:0;">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()" aria-label="Abrir menú">☰</button>
+    <div class="header-brand">
+      <div class="header-logo">Placeta<em>ID</em></div>
+      <div class="header-tag">v1.0</div>
+    </div>
   </div>
   <div class="header-right">
     <div class="header-pill">
@@ -1563,6 +1684,9 @@ textarea.form-input { resize: vertical; }
     </div>
   </div>
 </header>
+
+<!-- Sidebar overlay for mobile -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
 
 <div class="app">
 
@@ -2260,6 +2384,28 @@ function resetLogin() {
   document.getElementById('step1').classList.add('active');
   ['stepNum1','stepNum2','stepNum3'].forEach((id,i) => document.getElementById(id).textContent = i+1);
 }
+
+// ── MOBILE SIDEBAR TOGGLE ────────────────────────────────────────────────────
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.toggle('mobile-open');
+  overlay.classList.toggle('open', isOpen);
+  document.body.style.overflow = isOpen ? 'hidden' : '';
+}
+
+// Close mobile sidebar when a nav item is clicked
+document.addEventListener('click', e => {
+  const navItem = e.target.closest('.nav-item');
+  if (navItem && window.innerWidth <= 900) {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('mobile-open');
+    if (overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+});
 
 function cerrarSesion() {
   state.tokenSesion = null;
