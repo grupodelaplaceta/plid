@@ -221,9 +221,78 @@ const migracionPendienteSchema = new mongoose.Schema({
   migradoEn: { type: Date }
 });
 
+// ── DISPOSITIVO MÓVIL (PlacetaID Móvil) ──────────────────────────────────────
+const mobileDeviceSchema = new mongoose.Schema({
+  dip: {
+    type: String,
+    required: true,
+    uppercase: true,
+    trim: true,
+    match: /^\d{8}[A-Z]$/,
+    unique: true // Solo un dispositivo por PlacetaID
+  },
+  deviceToken: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
+  deviceName: {
+    type: String,
+    trim: true,
+    default: 'Dispositivo móvil'
+  },
+  platform: {
+    type: String,
+    enum: ['android', 'ios'],
+    default: 'android'
+  },
+  activo: { type: Boolean, default: true },
+  ultimoAcceso: { type: Date },
+  registradoEn: { type: Date, default: Date.now }
+});
+
+mobileDeviceSchema.index({ deviceToken: 1 });
+
+// ── SOLICITUD DE AUTENTICACIÓN (PlacetaID Móvil) ─────────────────────────────
+const authRequestSchema = new mongoose.Schema({
+  codigo: {
+    type: String,
+    required: true,
+    uppercase: true,
+    trim: true,
+    match: /^[A-Z0-9]{4,8}$/
+  },
+  dip: {
+    type: String,
+    required: true,
+    uppercase: true,
+    trim: true,
+    match: /^\d{8}[A-Z]$/
+  },
+  servicio: { type: String, required: true, trim: true },
+  servicioUrl: { type: String, trim: true },
+  plataforma: { type: String, default: 'web' },
+  estado: {
+    type: String,
+    enum: ['pending', 'authorized', 'denied', 'expired'],
+    default: 'pending',
+    index: true
+  },
+  autorizadoEn: { type: Date },
+  expiraEn: { type: Date, default: () => new Date(Date.now() + 5 * 60 * 1000) }, // 5 min
+  creadoEn: { type: Date, default: Date.now }
+});
+
+authRequestSchema.index({ codigo: 1 });
+authRequestSchema.index({ dip: 1, estado: 1 });
+authRequestSchema.index({ expiraEn: 1 }, { expireAfterSeconds: 0 }); // TTL: borrar expirados
+
 const Registro = mongoose.model('Registro', registroSchema);
 const Log = mongoose.model('Log', logSchema);
 const Solicitante = mongoose.model('Solicitante', solicitanteSchema);
 const MigracionPendiente = mongoose.model('MigracionPendiente', migracionPendienteSchema);
+const MobileDevice = mongoose.model('MobileDevice', mobileDeviceSchema);
+const AuthRequest = mongoose.model('AuthRequest', authRequestSchema);
 
-module.exports = { Registro, Log, Solicitante, MigracionPendiente };
+module.exports = { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest };

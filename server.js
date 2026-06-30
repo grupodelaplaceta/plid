@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const path = require('path');
 const crypto = require('crypto');
-const { Registro, Log, Solicitante, MigracionPendiente } = require('./models');
+const { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1506,6 +1506,268 @@ app.post('/api/setup/seed-admin', async (req, res) => {
   } catch (err) {
     console.error('❌ Error en seed-admin:', err.message, err.code);
     res.status(500).json({ error: err.message, code: err.code });
+  }
+});
+
+// ── API: PLACETAID MÓVIL ─────────────────────────────────────────────────────
+
+// Registrar dispositivo móvil asociado a un PlacetaID
+app.post('/api/mobil/register', async (req, res) => {
+  try {
+    const { dip, deviceToken, deviceName } = req.body;
+    if (!dip || !deviceToken) return res.status(400).json({ error: 'DIP y deviceToken requeridos' });
+
+    const cleanDip = normalizeDip(dip);
+    const registro = await Registro.findOne({ dip: cleanDip });
+    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
+    if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'PlacetaID bloqueado o inactivo' });
+
+    // Check if deviceToken is already registered to another DIP
+    const existingToken = await MobileDevice.findOne({ deviceToken, dip: { $ne: cleanDip } });
+    if (existingToken) {
+      await MobileDevice.deleteOne({ _id: existingToken._id });
+    }
+
+    // Check if this DIP already has a device registered
+    const existingDevice = await MobileDevice.findOne({ dip: cleanDip });
+    if (existingDevice) {
+      existingDevice.deviceToken = deviceToken;
+      existingDevice.deviceName = deviceName || 'Dispositivo móvil';
+      existingDevice.activo = true;
+      existingDevice.ultimoAcceso = new Date();
+      await existingDevice.save();
+      return res.json({ ok: true, mensaje: 'Dispositivo actualizado' });
+    }
+
+    await MobileDevice.create({
+      dip: cleanDip,
+      deviceToken,
+      deviceName: deviceName || 'Dispositivo móvil',
+      platform: 'android',
+      activo: true
+    });
+
+    console.log(`📱 Dispositivo registrado para ${cleanDip}`);
+    res.json({ ok: true, mensaje: 'Dispositivo registrado correctamente' });
+  } catch (err) {
+    console.error('Error register mobile:', err);
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'Este DIP ya tiene un dispositivo registrado. Desvincula el anterior primero.' });
+    }
+    res.status(500).json({ error: 'Error al registrar dispositivo' });
+  }
+});
+
+// Desvincular dispositivo
+app.post('/api/mobil/unregister', async (req, res) => {
+  try {
+    const { dip } = req.body;
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+
+    const deleted = await MobileDevice.findOneAndDelete({ dip: normalizeDip(dip) });
+    if (!deleted) return res.status(404).json({ error: 'No hay dispositivo registrado para este DIP' });
+
+    console.log(`📱 Dispositivo desvinculado para ${dip}`);
+    res.json({ ok: true, mensaje: 'Dispositivo desvinculado' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al desvincular dispositivo' });
+  }
+});
+
+// Generar código de solicitud de autenticación (desde web)
+app.post('/api/mobil/request', async (req, res) => {
+  try {
+    const { dip, servicio, servicioUrl, plataforma } = req.body;
+    if (!dip || !servicio) return res.status(400).json({ error: 'DIP y servicio requeridos' });
+
+    const cleanDip = normalizeDip(dip);
+    const registro = await Registro.findOne({ dip: cleanDip });
+    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
+    if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'Cuenta bloqueada o inactiva' });
+
+    // Check device is registered
+    const device = await MobileDevice.findOne({ dip: cleanDip, activo: true });
+    if (!device) return res.status(404).json({ error: 'No hay dispositivo registrado para este PlacetaID. Usa 2FA.' });
+
+    // Generate short code
+    const codigo = crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 4);
+
+    const authReq = await AuthRequest.create({
+      codigo,
+      dip: cleanDip,
+      servicio,
+      servicioUrl: servicioUrl || null,
+      plataforma: plataforma || 'web',
+      estado: 'pending',
+      expiraEn: new Date(Date.now() + 5 * 60 * 1000) // 5 min
+    });
+
+    console.log(`📱 Solicitud ${codigo} creada para ${cleanDip} desde ${servicio}`);
+
+    res.json({
+      ok: true,
+      codigo,
+      requestId: authReq._id.toString(),
+      mensaje: `Código ${codigo} generado. Revisa tu app PlacetaID Móvil.`
+    });
+  } catch (err) {
+    console.error('Error create request:', err);
+    res.status(500).json({ error: 'Error al crear solicitud' });
+  }
+});
+
+// Obtener solicitudes pendientes para un dispositivo
+app.get('/api/mobil/pending', async (req, res) => {
+  try {
+    const deviceToken = req.query.deviceToken;
+    if (!deviceToken) return res.status(400).json({ error: 'deviceToken requerido' });
+
+    const device = await MobileDevice.findOne({ deviceToken, activo: true });
+    if (!device) return res.status(404).json({ error: 'Dispositivo no registrado' });
+
+    const requests = await AuthRequest.find({
+      dip: device.dip,
+      estado: 'pending',
+      expiraEn: { $gt: new Date() }
+    }).sort({ creadoEn: -1 }).limit(20);
+
+    res.json({ ok: true, requests });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener solicitudes' });
+  }
+});
+
+// Autorizar o denegar una solicitud
+app.post('/api/mobil/authorize', async (req, res) => {
+  try {
+    const { requestId, dip, authorized, deviceToken } = req.body;
+    if (!requestId || !dip) return res.status(400).json({ error: 'requestId y dip requeridos' });
+
+    const cleanDip = normalizeDip(dip);
+
+    // Verify device
+    if (deviceToken) {
+      const device = await MobileDevice.findOne({ deviceToken, dip: cleanDip, activo: true });
+      if (!device) return res.status(403).json({ error: 'Dispositivo no autorizado para este DIP' });
+    }
+
+    const authReq = await AuthRequest.findById(requestId);
+    if (!authReq) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    if (authReq.dip !== cleanDip) return res.status(403).json({ error: 'Esta solicitud no corresponde a este DIP' });
+    if (authReq.estado !== 'pending') return res.status(400).json({ error: `La solicitud ya fue ${authReq.estado}` });
+    if (authReq.expiraEn < new Date()) {
+      authReq.estado = 'expired';
+      await authReq.save();
+      return res.status(400).json({ error: 'La solicitud ha expirado' });
+    }
+
+    authReq.estado = authorized ? 'authorized' : 'denied';
+    authReq.autorizadoEn = new Date();
+    await authReq.save();
+
+    if (deviceToken) {
+      await MobileDevice.findOneAndUpdate(
+        { deviceToken, dip: cleanDip },
+        { ultimoAcceso: new Date() }
+      );
+    }
+
+    // Log the event
+    await registrarLog({
+      dip: cleanDip,
+      registroId: (await Registro.findOne({ dip: cleanDip }))?._id,
+      servicio: authReq.servicio,
+      servicioUrl: authReq.servicioUrl,
+      evento: authorized ? 'intento_exitoso' : 'error_credenciales',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      fase: 'móvil',
+      metadatos: { tipo: 'placetaid_movil', codigo: authReq.codigo, requestId: authReq._id.toString() }
+    });
+
+    console.log(`📱 Solicitud ${authReq.codigo} ${authorized ? 'AUTORIZADA' : 'DENEGADA'} para ${cleanDip}`);
+
+    res.json({ ok: true, estado: authReq.estado, mensaje: authorized ? 'Solicitud autorizada' : 'Solicitud denegada' });
+  } catch (err) {
+    console.error('Error authorize:', err);
+    res.status(500).json({ error: 'Error al procesar solicitud' });
+  }
+});
+
+// Verificar estado de un PlacetaID (para la app móvil)
+app.get('/api/mobil/status/:dip', async (req, res) => {
+  try {
+    const dip = normalizeDip(req.params.dip);
+    const registro = await Registro.findOne({ dip }).select('-passwordHash -totpSecret');
+
+    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
+
+    res.json({
+      ok: true,
+      activo: registro.activo && !registro.bloqueado,
+      bloqueado: registro.bloqueado || registro.banned || false,
+      registro: publicRegistroData(registro)
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar estado' });
+  }
+});
+
+// Poll: comprobar si una solicitud fue autorizada (para la web)
+app.get('/api/mobil/poll/:requestId', async (req, res) => {
+  try {
+    const authReq = await AuthRequest.findById(req.params.requestId);
+    if (!authReq) return res.status(404).json({ error: 'Solicitud no encontrada' });
+
+    if (authReq.estado === 'authorized') {
+      // Complete login for this user
+      const registro = await Registro.findOne({ dip: authReq.dip });
+      if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+
+      const payload = {
+        servicio: authReq.servicio,
+        servicioUrl: authReq.servicioUrl,
+        platform: authReq.plataforma || 'web',
+        state: null
+      };
+
+      const loginResult = await completeLogin(registro, payload, req, 'móvil');
+      return res.json({ ok: true, autorizado: true, ...loginResult });
+    }
+
+    if (authReq.estado === 'denied') {
+      return res.json({ ok: true, autorizado: false, estado: 'denied', mensaje: 'Solicitud denegada' });
+    }
+
+    if (authReq.estado === 'expired' || authReq.expiraEn < new Date()) {
+      if (authReq.estado === 'pending') {
+        authReq.estado = 'expired';
+        await authReq.save();
+      }
+      return res.json({ ok: true, autorizado: false, estado: 'expired', mensaje: 'La solicitud ha expirado' });
+    }
+
+    // Still pending
+    res.json({ ok: true, autorizado: false, estado: 'pending' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar solicitud' });
+  }
+});
+
+// Obtener historial de acceso (para la app móvil)
+app.get('/api/mobil/history/:dip', async (req, res) => {
+  try {
+    const dip = normalizeDip(req.params.dip);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+
+    const logs = await Log.find({ dip })
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .select('dip servicio evento ip timestamp fase');
+
+    res.json({ ok: true, logs });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener historial' });
   }
 });
 
