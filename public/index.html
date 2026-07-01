@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PlacetaID — Pasarela de Identificación</title>
-<link rel="icon" type="image/png" href="assets/faviid.png">
+<link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -12,22 +12,22 @@
   /* ── Brand Purple ── */
   --primary: #3F00D8;
   --primary-light: #5a1fe8;
-  --primary-dark: #2d00a8;
+  --primary-dark: #260083;
   --primary-glow: rgba(63, 0, 216, 0.2);
 
   /* ── Semantic (Banco de La Placeta brand) ── */
-  --success: #00A884;
-  --success-soft: rgba(0, 168, 132, 0.1);
-  --warning: #FFB300;
-  --warning-soft: rgba(255, 179, 0, 0.12);
+  --success: #23b26d;
+  --success-soft: rgba(35, 178, 109, 0.1);
+  --warning: #d7a02d;
+  --warning-soft: rgba(215, 160, 45, 0.12);
   --error: #E00022;
   --error-soft: rgba(224, 0, 34, 0.1);
   --info: #3F00D8;
   --info-soft: rgba(63, 0, 216, 0.08);
-  --gold: #FFB300;
-  --gold-soft: rgba(255, 179, 0, 0.12);
-  --mint: #00A884;
-  --mint-soft: rgba(0, 168, 132, 0.1);
+  --gold: #d7a02d;
+  --gold-soft: rgba(215, 160, 45, 0.12);
+  --mint: #23b26d;
+  --mint-soft: rgba(35, 178, 109, 0.1);
   --income-green: #00A651;
   --income-green-soft: rgba(0, 166, 81, 0.1);
 
@@ -57,18 +57,18 @@
   --p300: #7c5ee8;
   --p400: #5a1fe8;
   --p500: #3F00D8;
-  --p600: #2d00a8;
+  --p600: #260083;
   --p700: #200080;
   --p800: #160060;
   --glow: rgba(63,0,216,0.35);
-  --green: #00A884;
-  --green-soft: rgba(0,168,132,0.1);
-  --red: #E00022;
-  --red-soft: rgba(224,0,34,0.1);
+  --green: #23b26d;
+  --green-soft: rgba(35,178,109,0.1);
+  --red: #e24d4d;
+  --red-soft: rgba(226,77,77,0.1);
   --blue: #3F00D8;
   --blue-soft: rgba(63,0,216,0.08);
-  --amber: #FFB300;
-  --amber-soft: rgba(255,179,0,0.12);
+  --amber: #d7a02d;
+  --amber-soft: rgba(215,160,45,0.12);
   --text-soft: #4C4057;
   --border-bright: #7c5ee8;
 
@@ -140,21 +140,19 @@ body {
 .app.admin-mode .admin-bg { display: block; }
 .app.admin-mode .landing-bg { display: none; }
 
-/* ══ HEADER ══ */
+/* ══ HEADER (GDLP-CRM style: solid purple) ══ */
 .header {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 62px;
-  background: rgba(255,255,255,0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 var(--border), 0 4px 16px var(--shadow);
+  height: 68px;
+  background: var(--primary);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 4px 20px rgba(23,19,34,0.25);
   z-index: 200;
   display: none;
   align-items: center;
   justify-content: space-between;
-  padding: 0 1.5rem 0 0;
+  padding: 0 0 0 0;
 }
 .app.admin-mode .header { display: flex; }
 
@@ -169,19 +167,19 @@ body {
   width: 248px;
   padding: 0 1.5rem;
   gap: 0.6rem;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid rgba(255,255,255,0.18);
   height: 100%;
 }
 
 .header-logo {
   font-weight: 800;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   letter-spacing: -0.03em;
-  color: var(--text);
+  color: #fff;
 }
 .header-logo em {
   font-style: normal;
-  color: var(--primary);
+  color: var(--gold);
 }
 .header-tag {
   font-family: var(--mono);
@@ -207,13 +205,13 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.18);
   border-radius: 100px;
   padding: 0.3rem 0.9rem;
   font-size: 0.78rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.85);
 }
 .header-dot {
   width: 7px; height: 7px;
@@ -227,17 +225,16 @@ body {
   50% { opacity: 0.35; }
 }
 
-#headerUser { font-family: var(--mono); font-size: 0.72rem; color: var(--primary); font-weight: 600; }
+#headerUser { font-family: var(--mono); font-size: 0.72rem; color: rgba(255,255,255,0.9); font-weight: 600; }
 
 /* ══ SIDEBAR ══ */
 .sidebar {
   position: fixed;
-  top: 62px;
+  top: 68px;
   left: 0;
   bottom: 0;
   width: 248px;
-  background: rgba(255,255,255,0.97);
-  backdrop-filter: blur(24px);
+  background: #fff;
   border-right: 1px solid var(--border);
   box-shadow: 2px 0 16px var(--shadow);
   display: none;
@@ -321,7 +318,7 @@ body {
 
 .app.admin-mode .main {
   margin-left: 248px;
-  padding-top: calc(62px + 2.5rem);
+  padding-top: calc(68px + 2.5rem);
   padding-left: 2.5rem;
   padding-right: 2.5rem;
   padding-bottom: 2.5rem;
@@ -809,7 +806,8 @@ textarea.form-input { resize: vertical; }
 }
 .stat-card:hover {
   border-color: var(--primary);
-  box-shadow: 0 4px 20px var(--shadow-lg);
+  box-shadow: 0 12px 32px var(--shadow-lg);
+  transform: translateY(-3px);
 }
 .stat-card::before {
   content: '';
@@ -1083,17 +1081,19 @@ textarea.form-input { resize: vertical; }
   font-size: 0.84rem;
 }
 .data-table thead th {
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
   text-align: left;
   font-family: var(--sans);
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: #fff;
   font-weight: 600;
-  border-bottom: 2px solid var(--border);
-  background: var(--surface-2);
+  border-bottom: none;
+  background: var(--primary);
 }
+.data-table thead th:first-child { border-radius: 10px 0 0 0; }
+.data-table thead th:last-child { border-radius: 0 10px 0 0; }
 .data-table td {
   padding: 0.8rem 1rem;
   border-bottom: 1px solid var(--border);
@@ -1297,6 +1297,76 @@ textarea.form-input { resize: vertical; }
 }
 
 
+/* ══ METHOD SELECTOR CARDS ══ */
+.method-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr 1fr;
+}
+.method-card {
+  cursor: pointer;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 1.2rem 0.8rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  background: var(--surface);
+}
+.method-card:hover,
+.method-card:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px var(--shadow-lg);
+  transform: translateY(-2px);
+}
+.method-card-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+.method-card-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.method-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  line-height: 1.35;
+}
+.method-card-desc strong {
+  color: var(--text-secondary);
+}
+
+/* ══ BACK BUTTON ══ */
+.btn-back {
+  margin-top: 0.6rem;
+}
+
+/* ══ RESULT ACTIONS ══ */
+.result-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ══ MOVIL PANEL ══ */
+.movil-hero {
+  font-size: 2.5rem;
+  margin-bottom: 0.3rem;
+}
+.movil-code {
+  font-size: 1.6rem;
+  letter-spacing: 0.3em;
+  color: var(--primary);
+}
+.movil-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
 /* ══ MOBILE SIDEBAR OVERLAY ══ */
 .sidebar-overlay {
   display: none;
@@ -1309,11 +1379,19 @@ textarea.form-input { resize: vertical; }
 }
 .sidebar-overlay.open { display: block; }
 
-/* ══ RESPONSIVE 900px ══ */
+/* ══ RESPONSIVE: Tablet landscape / small desktop (≤1024px) ══ */
+@media (max-width: 1024px) {
+  .integration-grid { grid-template-columns: repeat(2, 1fr); }
+  .client-metrics { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ══ RESPONSIVE 900px (tablet portrait) ══ */
 @media (max-width: 900px) {
   .sidebar { display: none !important; }
   .app.admin-mode .sidebar.mobile-open { display: flex !important; z-index: 101; }
   .app.admin-mode .main { margin-left: 0; padding: 1.25rem; }
+
+  /* ── Grids ── */
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .admin-hero { grid-template-columns: 1fr; }
   .integration-grid,
@@ -1321,31 +1399,44 @@ textarea.form-input { resize: vertical; }
   .two-col { grid-template-columns: 1fr; }
   .three-col { grid-template-columns: 1fr; }
   .client-grid { grid-template-columns: 1fr; }
+
+  /* ── Tables ── */
   .data-table { font-size: .75rem; }
   .data-table thead th,
   .data-table td { padding: .5rem .6rem; }
   .data-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Modal ── */
   .modal-panel { max-width: 98%; padding: 1rem; border-radius: 14px; }
   .admin-hero-badge { min-width: 100px; padding: .5rem .8rem; font-size: .8rem; }
+
+  /* ── Filters ── */
   .filter-row { flex-direction: column; align-items: stretch; }
   .filter-row .form-group { min-width: 0; }
-  .integration-grid { grid-template-columns: 1fr 1fr; }
 
-  /* Mobile hamburger button */
+  /* ── Mobile hamburger button ── */
   .mobile-menu-btn {
     display: flex !important;
     align-items: center;
     justify-content: center;
     width: 36px; height: 36px;
-    border: none; background: var(--surface-2);
-    border-radius: 8px; cursor: pointer;
-    color: var(--text-secondary);
+    border: none;
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.9);
     font-size: 1.2rem;
     margin-right: 0.5rem;
     flex-shrink: 0;
-    transition: background 0.2s;
+    transition: background 0.2s ease;
   }
-  .mobile-menu-btn:hover { background: var(--surface-hover); color: var(--primary); }
+  .mobile-menu-btn:hover { background: rgba(255,255,255,0.25); }
+
+  /* ── Method cards ── */
+  .method-card { padding: 1rem 0.65rem; }
+  .method-card-icon { font-size: 1.8rem; }
+  .method-card-title { font-size: 0.85rem; }
+  .method-card-desc { font-size: 0.72rem; }
 }
 
 /* ══ TABLET (641px – 899px) ══ */
@@ -1355,12 +1446,17 @@ textarea.form-input { resize: vertical; }
   .client-metrics { grid-template-columns: repeat(2, 1fr); }
   .integration-grid { grid-template-columns: repeat(2, 1fr); }
   .main { padding: 1.5rem; }
-  .app.admin-mode .main { padding: calc(62px + 1.5rem) 1.5rem 1.5rem; }
+  .app.admin-mode .main { padding: calc(68px + 1.5rem) 1.5rem 1.5rem; }
   .glass-card { padding: 1.5rem; }
   .stat-value { font-size: 1.8rem; }
   .login-logo .brand { font-size: 1.9rem; }
   .admin-hero h1 { font-size: 1.35rem; }
   .data-table { font-size: .78rem; }
+  .page-header h1 { font-size: 1.45rem; }
+  .method-card { padding: 1rem 0.7rem; }
+  .method-card-icon { font-size: 1.9rem; }
+  .header { height: 62px; }
+  .sidebar { top: 62px; }
 }
 
 /* ══ RESPONSIVE 640px (móvil) ══ */
@@ -1527,17 +1623,11 @@ textarea.form-input { resize: vertical; }
   .header-brand { width: auto; min-width: 0; padding: 0 .6rem; border-right: 0; }
   .header-tag,
   .header-pill { display: none; }
+  .header-logo { font-size: 1rem; }
   .mobile-menu-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
     width: 36px; height: 36px;
-    border: none; background: transparent;
-    border-radius: 8px; cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 1.2rem;
     margin-right: 0;
-    flex-shrink: 0;
+    font-size: 1.1rem;
   }
 
   /* ── Admin mode ── */
@@ -1618,6 +1708,22 @@ textarea.form-input { resize: vertical; }
 
   /* ── Checkbox rows ── */
   .checkbox-row { font-size: .78rem; }
+
+  /* ── Method selector ── */
+  .method-grid { grid-template-columns: 1fr; }
+  .method-card { padding: 0.9rem 0.7rem; }
+  .method-card-icon { font-size: 1.7rem; }
+  .method-card-title { font-size: 0.82rem; }
+  .method-card-desc { font-size: 0.7rem; }
+  .btn-back { margin-top: 0.5rem; }
+
+  /* ── Result actions ── */
+  .result-actions { flex-direction: column; }
+  .result-actions .btn { width: 100%; }
+
+  /* ── QR ── */
+  .qr-box { padding: .65rem; }
+  .qr-secret { font-size: .62rem; padding: .35rem .6rem; }
 }
 
 /* ══ EXTRA SMALL (≤400px) — pantallas muy pequeñas ══ */
@@ -1777,24 +1883,20 @@ textarea.form-input { resize: vertical; }
             <div class="card-heading">Elige cómo identificarte</div>
             <div class="card-subheading">Selecciona el método de autenticación</div>
           </div>
-          <div style="display:grid;gap:0.75rem;grid-template-columns:1fr 1fr;">
+          <div class="method-grid">
             <!-- 2FA Option -->
-            <div onclick="selectMethod('2fa')" style="cursor:pointer;border:2px solid var(--border);border-radius:14px;padding:1.2rem 0.8rem;text-align:center;transition:all 0.2s;background:#fff;"
-                 onmouseover="this.style.borderColor='var(--primary)';this.style.boxShadow='0 4px 16px var(--shadow-lg)'"
-                 onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-              <div style="font-size:2.2rem;margin-bottom:0.5rem;">🔐</div>
-              <div style="font-weight:700;font-size:0.92rem;color:var(--text);">Acceso vía 2FA</div>
-              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;line-height:1.35;">
+            <div class="method-card" onclick="selectMethod('2fa')">
+              <div class="method-card-icon">🔐</div>
+              <div class="method-card-title">Acceso vía 2FA</div>
+              <div class="method-card-desc">
                 Introduce DIP, contraseña y el código de tu aplicación autenticadora (Google Authenticator, Authy...).
               </div>
             </div>
             <!-- PlacetaID Móvil Option -->
-            <div onclick="selectMethod('movil')" style="cursor:pointer;border:2px solid var(--border);border-radius:14px;padding:1.2rem 0.8rem;text-align:center;transition:all 0.2s;background:#fff;"
-                 onmouseover="this.style.borderColor='var(--primary)';this.style.boxShadow='0 4px 16px var(--shadow-lg)'"
-                 onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-              <div style="font-size:2.2rem;margin-bottom:0.5rem;">📱</div>
-              <div style="font-weight:700;font-size:0.92rem;color:var(--text);">Acceso vía PlacetaID Móvil</div>
-              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;line-height:1.35;">
+            <div class="method-card" onclick="selectMethod('movil')">
+              <div class="method-card-icon">📱</div>
+              <div class="method-card-title">Acceso vía PlacetaID Móvil</div>
+              <div class="method-card-desc">
                 Usa la app <strong>PlacetaID Móvil</strong> para autorizar con tu huella o rostro. Introduce solo tu DIP y recibe una notificación.
               </div>
             </div>
@@ -1826,7 +1928,7 @@ textarea.form-input { resize: vertical; }
         <!-- ── PLACETAID MÓVIL ── -->
         <div class="glass-card" id="movilPanel" style="display:none;">
           <div class="card-gif-header">
-            <div style="font-size:2.5rem;margin-bottom:0.3rem;">📱</div>
+            <div class="movil-hero">📱</div>
             <div class="card-heading">PlacetaID Móvil</div>
             <div class="card-subheading">Recibirás una notificación en tu app para autorizar el acceso</div>
           </div>
@@ -1841,17 +1943,17 @@ textarea.form-input { resize: vertical; }
           <!-- Open app button (shown after code generation) -->
           <div id="movilOpenApp" style="display:none;margin-top:1rem;">
             <div class="alert alert-info" style="text-align:center;font-size:0.95rem;font-weight:700;">
-              Código: <span id="movilCodigo" style="font-size:1.6rem;letter-spacing:0.3em;color:var(--primary);"></span>
+              Código: <span class="movil-code" id="movilCodigo"></span>
             </div>
             <button class="btn btn-primary btn-full" id="btnMovilOpenApp" onclick="abrirPlacetaIDMovil()" style="margin-top:0.75rem;">
               📱 Abrir PlacetaID Móvil
             </button>
-            <p style="font-size:0.78rem;color:var(--text-muted);text-align:center;margin-top:0.5rem;">
+            <p class="movil-hint">
               La app se abrirá automáticamente. Si no la tienes instalada,
               <a href="#" onclick="volverAMetodos();return false;" style="color:var(--primary);">elige otro método</a>.
             </p>
           </div>
-          <button class="btn btn-ghost btn-full" style="margin-top:0.6rem;" onclick="volverAMetodos()">
+          <button class="btn btn-ghost btn-full btn-back" onclick="volverAMetodos()">
             ← Volver a métodos
           </button>
         </div>
@@ -1882,7 +1984,7 @@ textarea.form-input { resize: vertical; }
           </div>
           <div class="alert alert-success" id="resultAlert"></div>
           <div class="gateway-result" id="gatewayOutput"></div>
-          <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+          <div class="result-actions">
             <button class="btn btn-ghost" onclick="resetLogin()">Nueva sesión</button>
             <button class="btn btn-primary" id="btnPanel" onclick="irAlPanel()" style="display:none">Ir al panel →</button>
           </div>
