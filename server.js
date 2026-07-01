@@ -1606,13 +1606,6 @@ app.post('/api/mobil/request', async (req, res) => {
     if (!dip || !servicio) return res.status(400).json({ error: 'DIP y servicio requeridos' });
 
     const cleanDip = normalizeDip(dip);
-    const registro = await Registro.findOne({ dip: cleanDip });
-    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
-    if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'Cuenta bloqueada o inactiva' });
-
-    // Check device is registered
-    const device = await MobileDevice.findOne({ dip: cleanDip, activo: true });
-    if (!device) return res.status(404).json({ error: 'No hay dispositivo registrado para este PlacetaID. Usa 2FA.' });
 
     // Generate short code
     const codigo = crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 4);
@@ -1641,17 +1634,16 @@ app.post('/api/mobil/request', async (req, res) => {
   }
 });
 
-// Obtener solicitudes pendientes para un dispositivo
+// Obtener solicitudes pendientes por DIP
 app.get('/api/mobil/pending', async (req, res) => {
   try {
-    const deviceToken = req.query.deviceToken;
-    if (!deviceToken) return res.status(400).json({ error: 'deviceToken requerido' });
+    const dip = req.query.dip;
+    if (!dip) return res.status(400).json({ error: 'dip requerido' });
 
-    const device = await MobileDevice.findOne({ deviceToken, activo: true });
-    if (!device) return res.status(404).json({ error: 'Dispositivo no registrado' });
+    const cleanDip = normalizeDip(dip);
 
     const requests = await AuthRequest.find({
-      dip: device.dip,
+      dip: cleanDip,
       estado: 'pending',
       expiraEn: { $gt: new Date() }
     }).sort({ creadoEn: -1 }).limit(20);
@@ -1665,16 +1657,10 @@ app.get('/api/mobil/pending', async (req, res) => {
 // Autorizar o denegar una solicitud
 app.post('/api/mobil/authorize', async (req, res) => {
   try {
-    const { requestId, dip, authorized, deviceToken } = req.body;
+    const { requestId, dip, authorized } = req.body;
     if (!requestId || !dip) return res.status(400).json({ error: 'requestId y dip requeridos' });
 
     const cleanDip = normalizeDip(dip);
-
-    // Verify device
-    if (deviceToken) {
-      const device = await MobileDevice.findOne({ deviceToken, dip: cleanDip, activo: true });
-      if (!device) return res.status(403).json({ error: 'Dispositivo no autorizado para este DIP' });
-    }
 
     const authReq = await AuthRequest.findById(requestId);
     if (!authReq) return res.status(404).json({ error: 'Solicitud no encontrada' });
@@ -1689,13 +1675,6 @@ app.post('/api/mobil/authorize', async (req, res) => {
     authReq.estado = authorized ? 'authorized' : 'denied';
     authReq.autorizadoEn = new Date();
     await authReq.save();
-
-    if (deviceToken) {
-      await MobileDevice.findOneAndUpdate(
-        { deviceToken, dip: cleanDip },
-        { ultimoAcceso: new Date() }
-      );
-    }
 
     // Log the event
     await registrarLog({
