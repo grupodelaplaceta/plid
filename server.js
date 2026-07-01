@@ -1514,13 +1514,25 @@ app.post('/api/setup/seed-admin', async (req, res) => {
 // Registrar dispositivo móvil asociado a un PlacetaID
 app.post('/api/mobil/register', async (req, res) => {
   try {
-    const { dip, deviceToken, deviceName } = req.body;
-    if (!dip || !deviceToken) return res.status(400).json({ error: 'DIP y deviceToken requeridos' });
+    const { dip, password, deviceToken, deviceName } = req.body;
+    if (!dip || !password || !deviceToken) return res.status(400).json({ error: 'DIP, contraseña y deviceToken requeridos' });
 
     const cleanDip = normalizeDip(dip);
     const registro = await Registro.findOne({ dip: cleanDip });
     if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
     if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'PlacetaID bloqueado o inactivo' });
+
+    // Verify password
+    const passwordValid = await bcrypt.compare(password, registro.passwordHash);
+    if (!passwordValid) {
+      await registrarLog({
+        dip: cleanDip, registroId: registro._id,
+        servicio: 'PlacetaID Móvil', evento: 'error_credenciales',
+        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
+        metadatos: { accion: 'registro_dispositivo', resultado: 'password_incorrecta' }
+      });
+      return res.status(401).json({ error: 'Contraseña incorrecta' });
+    }
 
     // Check if deviceToken is already registered to another DIP
     const existingToken = await MobileDevice.findOne({ deviceToken, dip: { $ne: cleanDip } });
@@ -1536,6 +1548,12 @@ app.post('/api/mobil/register', async (req, res) => {
       existingDevice.activo = true;
       existingDevice.ultimoAcceso = new Date();
       await existingDevice.save();
+      await registrarLog({
+        dip: cleanDip, registroId: registro._id,
+        servicio: 'PlacetaID Móvil', evento: 'intento_exitoso',
+        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
+        metadatos: { accion: 'registro_dispositivo', resultado: 'actualizado' }
+      });
       return res.json({ ok: true, mensaje: 'Dispositivo actualizado' });
     }
 
@@ -1545,6 +1563,13 @@ app.post('/api/mobil/register', async (req, res) => {
       deviceName: deviceName || 'Dispositivo móvil',
       platform: 'android',
       activo: true
+    });
+
+    await registrarLog({
+      dip: cleanDip, registroId: registro._id,
+      servicio: 'PlacetaID Móvil', evento: 'intento_exitoso',
+      ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
+      metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo' }
     });
 
     console.log(`📱 Dispositivo registrado para ${cleanDip}`);
