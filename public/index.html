@@ -10,53 +10,55 @@
 <style>
 /* ═══════════════════════════════════════════════════════════════
    PlacetaID — Design System
-   Basado en GDLP CRM · Colores planos corporativos
-   Fuente: Outfit | Acento: Morado #3F00D8
+   Basado en GDLP publico.css · Colores planos corporativos
+   Fuente: Outfit | Acento: #3f00d8 | Dark: #1c005f
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Variables de Color ──────────────────────────────────────── */
 :root {
-  /* ── Brand ── */
-  --accent:      #3F00D8;
-  --accent-dark: #260083;
+  /* ── Brand (publico.css) ── */
+  --p:  #3f00d8;
+  --pd: #1c005f;
+
+  --accent:      var(--p);
+  --accent-dark: var(--pd);
   --accent-soft: rgba(63, 0, 216, 0.09);
 
   /* ── Aliases ── */
-  --primary:       var(--accent);
-  --primary-dark:  var(--accent-dark);
+  --primary:       var(--p);
+  --primary-dark:  var(--pd);
   --primary-light: #5a1fe8;
   --primary-glow:  rgba(63, 0, 216, 0.2);
 
-  /* ── Surfaces ── */
-  --bg:        #f6f7fb;
-  --bg-2:      #ffffff;
+  /* ── Surfaces (publico.css) ── */
+  --bg:        #f5f3f7;
   --surface:   #ffffff;
   --surface-2: #f1eef8;
 
-  /* ── Text ── */
-  --text:       #171322;
-  --text-light: #665f75;
-  --muted:      #665f75;
+  /* ── Text (publico.css) ── */
+  --text:       #111111;
+  --text-light: #444444;
+  --muted:      #444444;
   --text-dim:   #8878a0;
 
   /* ── Lines & Borders ── */
-  --line:        rgba(23, 19, 34, 0.1);
-  --border:      rgba(23, 19, 34, 0.12);
-  --border-strong: rgba(23, 19, 34, 0.18);
-  --border-focus: var(--accent);
+  --line:         rgba(0, 0, 0, 0.08);
+  --border:       rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  --border-focus: var(--p);
 
-  /* ── Semantic (planos, sin dorado) ── */
-  --green:   #23b26d;
-  --red:     #e24d4d;
+  /* ── Semantic (planos) ── */
+  --green:   #22a06b;
+  --red:     #d03131;
   --info:    #3b82f6;
   --warning: #f59e0b;
 
   --success:       var(--green);
-  --success-soft:  rgba(35, 178, 109, 0.1);
+  --success-soft:  rgba(34, 160, 107, 0.1);
   --error:         var(--red);
-  --error-soft:    rgba(226, 77, 77, 0.1);
+  --error-soft:    rgba(208, 49, 49, 0.1);
   --danger:        var(--red);
-  --danger-soft:   rgba(226, 77, 77, 0.1);
+  --danger-soft:   rgba(208, 49, 49, 0.1);
   --warning-soft:  rgba(245, 158, 11, 0.1);
   --info-soft:     rgba(59, 130, 246, 0.1);
 
@@ -75,14 +77,14 @@
   --p200: #c4b5fd;
   --p300: #7c5ee8;
   --p400: var(--primary-light);
-  --p500: var(--accent);
-  --p600: var(--accent-dark);
+  --p500: var(--p);
+  --p600: var(--pd);
   --p700: #200080;
   --p800: #160060;
   --glow: rgba(63,0,216,0.35);
   --green-soft: var(--success-soft);
   --red-soft: var(--error-soft);
-  --blue: var(--accent);
+  --blue: var(--p);
   --blue-soft: var(--accent-soft);
   --amber: var(--warning);
   --amber-soft: var(--warning-soft);
@@ -94,19 +96,19 @@
   --mono:  'Outfit', sans-serif;
   --sans:  'Outfit', sans-serif;
 
-  /* ── Radius ── */
+  /* ── Radius (publico.css) ── */
   --radius-sm:  8px;
-  --radius:     14px;
-  --radius-md:  14px;
-  --radius-lg:  20px;
+  --radius:     12px;
+  --radius-md:  12px;
+  --radius-lg:  18px;
 
-  /* ── Shadows ── */
-  --shadow:    0 18px 46px rgba(23, 19, 34, 0.08);
-  --shadow-lg: 0 24px 70px rgba(23, 19, 34, 0.12);
-  --shadow-xl: 0 28px 80px rgba(23, 19, 34, 0.16);
+  /* ── Shadows (publico.css) ── */
+  --shadow:    0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 24px 70px rgba(0, 0, 0, 0.15);
 
   /* ── Transitions ── */
-  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.2s ease;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -137,7 +139,9 @@ body {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(63,0,216,0.06) 0%, transparent 60%),
+    var(--bg);
   overflow: hidden;
 }
 .landing-bg::before {
@@ -656,59 +660,55 @@ body {
 select.form-input { cursor: pointer; }
 textarea.form-input { resize: vertical; }
 
-/* ── Buttons (GDLP-CRM flat) ── */
+/* ── Buttons (publico.css flat) ── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  padding: 12px 24px;
   font-family: var(--font);
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   border: none;
   transition: all var(--transition);
-  letter-spacing: 0.01em;
   text-decoration: none;
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--p);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(63,0,216,0.3);
 }
 .btn-primary:hover {
-  background: var(--accent-dark);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(63,0,216,0.35);
+  background: var(--pd);
+  transform: translateY(-1px);
 }
-.btn-primary:active { transform: translateY(0); }
 
 .btn-ghost {
   background: transparent;
   color: var(--text);
-  border: 2px solid var(--line);
+  border: 1.5px solid rgba(255,255,255,0.3);
 }
 .btn-ghost:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: #fff;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
 }
 
 .btn-danger {
   background: var(--red);
   color: #fff;
 }
-.btn-danger:hover { background: #c93a3a; transform: translateY(-2px); }
+.btn-danger:hover { background: #c93a3a; transform: translateY(-1px); }
 
 .btn-gold { display: none; }
 
-.btn-sm { padding: 0.35rem 0.85rem; font-size: 0.75rem; border-radius: 10px; }
-.btn-lg { padding: 0.9rem 2rem; font-size: 1rem; }
+.btn-sm { padding: 8px 14px; font-size: 12px; border-radius: 8px; }
+.btn-lg { padding: 14px 28px; font-size: 16px; }
 .btn-full, .btn-block { width: 100%; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
 /* ── Alerts (GDLP-aligned) ── */
 .alert {
@@ -904,22 +904,23 @@ textarea.form-input { resize: vertical; }
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 1.5rem;
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--p);
+  color: #fff;
+  border: none;
   border-radius: var(--radius-lg);
-  padding: 1.4rem 1.6rem;
+  padding: 2rem 2rem;
   margin-bottom: 1.25rem;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
 }
 .admin-hero h1 {
   font-size: 1.55rem;
   line-height: 1.05;
-  color: var(--text);
+  color: #fff;
   letter-spacing: -0.03em;
 }
 .admin-hero p {
   max-width: 760px;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.85);
   font-size: 0.92rem;
   margin-top: 0.45rem;
 }
@@ -930,7 +931,8 @@ textarea.form-input { resize: vertical; }
   min-width: 150px;
   padding: 0.75rem 1rem;
   border-radius: 12px;
-  background: var(--accent);
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
   color: #fff;
   font-weight: 800;
   letter-spacing: 0.03em;
@@ -1119,7 +1121,7 @@ textarea.form-input { resize: vertical; }
   color: #fff;
   font-weight: 600;
   border-bottom: none;
-  background: var(--accent);
+  background: var(--pd);
 }
 .data-table thead th:first-child { border-radius: 10px 0 0 0; }
 .data-table thead th:last-child { border-radius: 0 10px 0 0; }

@@ -8,35 +8,34 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
-    /* ══ GDLP CRM · Colores planos corporativos ══ */
+    /* ══ GDLP publico.css · Colores planos corporativos ══ */
     :root {
-      --accent:      #3F00D8;
-      --accent-dark: #260083;
-      --accent-soft: rgba(63,0,216,0.09);
-      --bg:        #f6f7fb;
+      --p:  #3f00d8;
+      --pd: #1c005f;
+      --bg:        #f5f3f7;
       --surface:   #ffffff;
       --surface-2: #f1eef8;
-      --text:      #171322;
-      --text-light:#665f75;
-      --line:      rgba(23,19,34,0.1);
-      --green:     #23b26d;
-      --red:       #e24d4d;
+      --text:      #111111;
+      --text-light:#444444;
+      --line:      rgba(0,0,0,0.08);
+      --green:     #22a06b;
+      --red:       #d03131;
       --info:      #3b82f6;
       --warning:   #f59e0b;
-      --radius:    14px;
+      --radius:    12px;
       --radius-sm: 8px;
-      --radius-lg: 20px;
-      --shadow:    0 18px 46px rgba(23,19,34,0.08);
-      --shadow-lg: 0 24px 70px rgba(23,19,34,0.12);
+      --radius-lg: 18px;
+      --shadow:    0 4px 20px rgba(0,0,0,.08);
+      --shadow-lg: 0 8px 30px rgba(0,0,0,.12);
       --font: 'Outfit', sans-serif;
-      --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+      --transition: 0.2s ease;
     }
 
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: var(--font);
-      background: linear-gradient(160deg, var(--accent-dark) 0%, var(--accent) 50%, #5a1fff 100%);
+      background: linear-gradient(160deg, var(--pd) 0%, var(--p) 50%, #5a1fff 100%);
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -50,13 +49,12 @@
       border-radius: var(--radius-lg);
       padding: 2rem;
       box-shadow: var(--shadow-lg);
-      border: 1px solid var(--line);
     }
     .card::before {
       content: '';
       display: block;
       height: 3px;
-      background: var(--accent);
+      background: var(--p);
       margin: -2rem -2rem 1.75rem;
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
@@ -122,14 +120,12 @@
       letter-spacing: 0.01em;
     }
     .btn-primary {
-      background: var(--accent);
+      background: var(--p);
       color: #fff;
-      box-shadow: 0 4px 14px rgba(63,0,216,0.3);
     }
     .btn-primary:hover {
-      background: var(--accent-dark);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(63,0,216,0.35);
+      background: var(--pd);
+      transform: translateY(-1px);
     }
     .btn-primary:active { transform: translateY(0); }
     .btn-danger {
@@ -139,7 +135,7 @@
     }
     .btn-danger:hover {
       background: #c93a3a;
-      transform: translateY(-2px);
+      transform: translateY(-1px);
     }
     .code-block {
       background: #1a1530;
@@ -166,23 +162,23 @@
       margin-bottom: 1rem;
     }
     .status.authenticated {
-      background: #f0fdf4;
+      background: #e6f7ee;
       color: #166534;
       border: 1px solid #bbf7d0;
     }
     .status.unauthenticated {
-      background: #fef2f2;
+      background: #fde8e8;
       color: var(--red);
-      border: 1px solid #fecaca;
+      border: 1px solid #f8d7da;
     }
     .info-box {
-      background: #eff6ff;
-      border-left: 4px solid var(--accent);
+      background: #eef2ff;
+      border-left: 4px solid var(--p);
       padding: 1rem;
       border-radius: var(--radius-sm);
       margin-bottom: 1.5rem;
       font-size: 0.9rem;
-      color: #1e40af;
+      color: var(--text);
     }
 
     /* ══ RESPONSIVE — Tablet ══ */
