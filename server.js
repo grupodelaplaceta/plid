@@ -1247,6 +1247,8 @@ app.post('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) 
     deepLinkHost,
     pkceRequired = true,
     permitirWebFallback = true
+    logo = '',
+    bgColor = ''
   } = req.body;
   const callbacks = normalizeRedirectUris(urlOrigen, redirectUris);
   if (!nombre || callbacks.length === 0) return res.status(400).json({ error: 'Nombre y al menos un callback son requeridos' });
@@ -1265,6 +1267,8 @@ app.post('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) 
       deepLinkHost,
       pkceRequired: Boolean(pkceRequired),
       permitirWebFallback: Boolean(permitirWebFallback),
+      logo,
+      bgColor,
       apiKey,
       creadoPor: req.user.registroId
     });
@@ -1306,6 +1310,37 @@ app.delete('/api/admin/solicitantes/:id', verifyToken, requireAdmin, async (req,
   }
 });
 
+// ── Subir logo de solicitante (base64, max 256KB) ──
+app.post('/api/admin/solicitantes/upload-logo', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { dataUrl } = req.body;
+    if (!dataUrl || typeof dataUrl !== 'string') return res.status(400).json({ error: 'dataUrl requerido' });
+    if (!dataUrl.startsWith('data:image/')) return res.status(400).json({ error: 'Solo se permiten imágenes en data URL' });
+    // Limitar tamaño (~256KB en base64)
+    if (dataUrl.length > 350000) return res.status(400).json({ error: 'Logo demasiado grande (máx 256KB)' });
+    res.json({ ok: true, logo: dataUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Actualizar branding de solicitante (logo + bgColor) ──
+app.patch('/api/admin/solicitantes/:id/branding', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { logo, bgColor } = req.body;
+    const update = {};
+    if (logo !== undefined) update.logo = logo;
+    if (bgColor !== undefined) update.bgColor = bgColor;
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'Nada que actualizar' });
+
+    const solicitante = await Solicitante.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
+    res.json({ ok: true, solicitante });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Obtener info del solicitante en producción (validar por apiKey)
 app.get('/api/solicitante/info', async (req, res) => {
   const key = req.headers['x-api-key'];
@@ -1330,7 +1365,9 @@ app.get('/api/solicitante/info', async (req, res) => {
       bundleId: solicitante.bundleId,
       deepLinkHost: solicitante.deepLinkHost,
       pkceRequired: solicitante.pkceRequired,
-      permitirWebFallback: solicitante.permitirWebFallback
+      permitirWebFallback: solicitante.permitirWebFallback,
+      logo: solicitante.logo || '',
+      bgColor: solicitante.bgColor || ''
     });
   } catch (err) {
     res.status(500).json({ error: 'Error' });

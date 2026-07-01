@@ -109,6 +109,11 @@
 
   /* ── Transitions ── */
   --transition: 0.2s ease;
+
+  /* ── Dynamic branding (sobrescrito por JS) ── */
+  --dynamic-text: #fff;
+  --dynamic-text-muted: rgba(255,255,255,0.5);
+  --dynamic-surface: rgba(255,255,255,0.07);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -117,11 +122,12 @@ html { scroll-behavior: smooth; }
 
 body {
   font-family: var(--font);
-  background: var(--background);
-  color: var(--text);
+  background: #1c005f;
+  color: #fff;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.5s ease, color 0.5s ease;
 }
 
 /* ── Scrollbar (GDLP) ── */
@@ -139,10 +145,9 @@ body {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(63,0,216,0.06) 0%, transparent 60%),
-    var(--bg);
+  background: #1c005f;
   overflow: hidden;
+  transition: background 0.5s ease;
 }
 .landing-bg::before {
   content: '';
@@ -402,7 +407,7 @@ body {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: -0.04em;
-  color: var(--text);
+  color: var(--dynamic-text);
   display: block;
 }
 .login-logo .brand em {
@@ -411,7 +416,7 @@ body {
 }
 .login-logo .tagline {
   font-size: 0.82rem;
-  color: var(--text-muted);
+  color: var(--dynamic-text-muted);
   font-weight: 400;
   letter-spacing: 0.02em;
   margin-top: 0.3rem;
@@ -465,6 +470,7 @@ body {
   margin-top: .08rem;
   font-size: .95rem;
   color: var(--text);
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -472,8 +478,8 @@ body {
 .request-title small {
   display: block;
   margin-top: .06rem;
-  color: var(--text-muted);
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
   font-size: .72rem;
   white-space: nowrap;
   overflow: hidden;
@@ -513,7 +519,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.78rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   flex: 1;
   transition: color 0.3s;
@@ -531,7 +537,7 @@ body {
   flex-shrink: 0;
   transition: all 0.3s;
   background: var(--surface);
-  color: var(--text-light);
+  color: var(--text);
 }
 .step.active .step-num {
   border-color: var(--accent);
@@ -606,8 +612,8 @@ body {
 .form-label {
   display: block;
   font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--text);
   letter-spacing: 0.03em;
   margin-bottom: 0.45rem;
 }
@@ -625,7 +631,7 @@ body {
   transition: all 0.2s;
   outline: none;
 }
-.form-input::placeholder { color: var(--text-light); font-weight: 400; }
+.form-input::placeholder { color: #8a8a8a; font-weight: 400; opacity: 1; }
 .form-input:focus {
   border-color: var(--accent);
   background: var(--surface);
@@ -689,12 +695,12 @@ textarea.form-input { resize: vertical; }
 .btn-ghost {
   background: transparent;
   color: var(--text);
-  border: 1.5px solid rgba(255,255,255,0.3);
+  border: 1.5px solid var(--border);
 }
 .btn-ghost:hover {
-  border-color: #fff;
-  background: rgba(255,255,255,0.1);
-  color: #fff;
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .btn-danger {
@@ -723,10 +729,10 @@ textarea.form-input { resize: vertical; }
   line-height: 1.5;
   border: 1px solid transparent;
 }
-.alert-error, .alert-danger   { background: #fef2f2; border-color: #fecaca; color: var(--red); }
-.alert-success                { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-.alert-info                   { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
-.alert-warning                { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.alert-error, .alert-danger   { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.alert-success                { background: #f0fdf4; border-color: #86efac; color: #14532d; }
+.alert-info                   { background: #eff6ff; border-color: #93c5fd; color: #1e3a5f; }
+.alert-warning                { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
 
 /* Gateway result */
 .gateway-result {
@@ -1259,14 +1265,14 @@ textarea.form-input { resize: vertical; }
 }
 .card-gif-header .card-heading {
   font-size: 1.15rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text);
   letter-spacing: -0.02em;
 }
 .card-gif-header .card-subheading {
   font-size: 0.82rem;
-  color: var(--text-muted);
-  font-weight: 400;
+  color: var(--text);
+  font-weight: 500;
 }
 
 /* ══ SUCCESS OVERLAY ══ */
@@ -1368,12 +1374,14 @@ textarea.form-input { resize: vertical; }
 }
 .method-card-desc {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text);
   margin-top: 0.3rem;
   line-height: 1.35;
+  font-weight: 400;
 }
 .method-card-desc strong {
-  color: var(--text-secondary);
+  color: var(--text);
+  font-weight: 700;
 }
 
 /* ══ BACK BUTTON ══ */
@@ -1389,7 +1397,7 @@ textarea.form-input { resize: vertical; }
   flex-wrap: wrap;
 }
 
-/* ══ MOVIL PANEL ══ */
+/* ══ MOVIL PANEL (LEGACY - kept for compat) ══ */
 .movil-hero {
   font-size: 2.5rem;
   margin-bottom: 0.3rem;
@@ -1404,6 +1412,219 @@ textarea.form-input { resize: vertical; }
   color: var(--text-muted);
   text-align: center;
   margin-top: 0.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PLACETAID MÓVIL — Multipaso (mismo estilo que fase1/fase2)
+   ═══════════════════════════════════════════════════════════════ */
+.movil-app-wrap {
+  max-width: 460px;
+  width: 100%;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  animation: cardIn 0.4s ease both;
+}
+.movil-app-wrap::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--accent);
+  z-index: 1;
+}
+
+/* ── Step panels ── */
+.movil-step {
+  padding: 1.8rem 1.5rem 1.4rem;
+  animation: movilStepIn 0.3s ease both;
+}
+@keyframes movilStepIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Step header ── */
+.movil-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.movil-app-icon {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(63,0,216,0.25);
+  flex-shrink: 0;
+}
+.movil-app-icon-pulse {
+  animation: movilIconPulse 2s ease-in-out infinite;
+}
+@keyframes movilIconPulse {
+  0%, 100% { box-shadow: 0 6px 18px rgba(63,0,216,0.25); }
+  50%      { box-shadow: 0 6px 28px rgba(63,0,216,0.45); }
+}
+.movil-step-badge {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(63,0,216,0.12);
+  padding: 0.28rem 0.65rem;
+  border-radius: 100px;
+}
+
+/* ── Titles & descriptions ── */
+.movil-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.3rem;
+}
+.movil-desc {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 1.1rem;
+}
+.movil-desc strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Identity confirmation card ── */
+.movil-identity-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0;
+  margin-bottom: 1.1rem;
+  overflow: hidden;
+}
+.movil-identity-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.movil-identity-row:last-child { border-bottom: none; }
+.movil-identity-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.movil-identity-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Code box ── */
+.movil-code-box {
+  background: var(--surface-2);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 1.1rem;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+.movil-code-label {
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+.movil-code-value {
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  color: var(--accent);
+  font-family: var(--font);
+}
+
+/* ── Hint box ── */
+.movil-hint-box {
+  text-align: center;
+  padding: 0.6rem 0 0;
+}
+.movil-hint-box p {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin: 0 0 0.2rem;
+}
+.movil-hint-box a {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.movil-hint-box a:hover { color: var(--accent-dark); }
+
+/* ── Spinner & loader ── */
+.movil-spinner {
+  width: 28px; height: 28px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: movilSpin 0.8s linear infinite;
+  margin: 0 auto 0.5rem;
+}
+@keyframes movilSpin { to { transform: rotate(360deg); } }
+.movil-loader-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Movil buttons (reuse .btn) ── */
+.movil-btn-row {
+  display: flex;
+  gap: 0.65rem;
+}
+.movil-btn-row .btn { flex: 1; }
+
+/* ── Progress bar ── */
+.movil-progress {
+  height: 3px;
+  background: var(--line);
+  position: relative;
+}
+.movil-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+  width: 33.33%;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .movil-app-wrap {
+    border-radius: var(--radius-sm);
+    max-width: none;
+  }
+  .movil-step {
+    padding: 1.2rem 0.95rem 1rem;
+  }
+  .movil-title { font-size: 1.1rem; }
+  .movil-desc { font-size: 0.78rem; }
+  .movil-code-value { font-size: 1.5rem; }
+  .movil-app-icon { width: 40px; height: 40px; border-radius: 10px; }
+  .movil-step-badge { font-size: 0.6rem; }
 }
 
 /* ══ MOBILE SIDEBAR OVERLAY ══ */
@@ -1880,6 +2101,9 @@ textarea.form-input { resize: vertical; }
       <div class="login-wrap">
 
         <div class="login-logo">
+          <div id="solicitanteLogoWrap" style="display:none;margin-bottom:0.75rem;">
+            <img id="solicitanteLogoImg" src="" alt="" style="max-height:72px;max-width:220px;object-fit:contain;">
+          </div>
           <span class="brand">Placeta<em>ID</em></span>
           <div class="tagline">Pasarela de Identificación · Grupo de La Placeta</div>
         </div>
@@ -1966,37 +2190,109 @@ textarea.form-input { resize: vertical; }
           </button>
         </div>
 
-        <!-- ── PLACETAID MÓVIL ── -->
-        <div class="glass-card" id="movilPanel" style="display:none;">
-          <div class="card-gif-header">
-            <div class="movil-hero">📱</div>
-            <div class="card-heading">PlacetaID Móvil</div>
-            <div class="card-subheading">Recibirás una notificación en tu app para autorizar el acceso</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">DIP — Documento de Identidad</label>
-            <input class="form-input" id="movilDip" type="text" placeholder="Ej: 12345678M" autocomplete="off" style="text-transform:uppercase;">
-          </div>
-          <button class="btn btn-primary btn-full" id="btnMovilRequest" onclick="movilSolicitar()" style="margin-top:0.5rem;">
-            Solicitar autorización →
-          </button>
-          <div id="movilRequestResult" style="margin-top:0.75rem;"></div>
-          <!-- Open app button (shown after code generation) -->
-          <div id="movilOpenApp" style="display:none;margin-top:1rem;">
-            <div class="alert alert-info" style="text-align:center;font-size:0.95rem;font-weight:700;">
-              Código: <span class="movil-code" id="movilCodigo"></span>
+        <!-- ═══════════════════════════════════════════════════════════════
+             PLACETAID MÓVIL — Multipaso (estilo app, fondo oscuro)
+             ═══════════════════════════════════════════════════════════════ -->
+        <div class="movil-app-wrap" id="movilPanel" style="display:none;">
+
+          <!-- ── Paso 1/3: Introduce tu DIP ── -->
+          <div class="movil-step" id="movilStep1">
+            <div class="movil-step-header">
+              <div class="movil-app-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              </div>
+              <div class="movil-step-badge">Paso 1 de 3</div>
             </div>
-            <button class="btn btn-primary btn-full" id="btnMovilOpenApp" onclick="abrirPlacetaIDMovil()" style="margin-top:0.75rem;">
+            <h2 class="movil-title">PlacetaID Móvil</h2>
+            <p class="movil-desc">Accede de forma segura con tu app. Introduce tu documento para continuar.</p>
+            <div class="form-group">
+              <label class="form-label">DIP — Documento de Identidad</label>
+              <input class="form-input" id="movilDip" type="text" placeholder="12345678M" autocomplete="off" style="text-transform:uppercase;" maxlength="10">
+            </div>
+            <button class="btn btn-primary btn-full" id="btnMovilStep1" onclick="movilIrPaso2()">
+              Continuar →
+            </button>
+            <button class="btn btn-ghost btn-full" style="margin-top:0.5rem;" onclick="volverAMetodos()">
+              ← Volver
+            </button>
+          </div>
+
+          <!-- ── Paso 2/3: Confirmación ── -->
+          <div class="movil-step" id="movilStep2" style="display:none;">
+            <div class="movil-step-header">
+              <div class="movil-app-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <div class="movil-step-badge">Paso 2 de 3</div>
+            </div>
+            <h2 class="movil-title">Confirma tu identidad</h2>
+            <p class="movil-desc">Se enviará una notificación a tu app <strong>PlacetaID Móvil</strong> para que autorices el acceso.</p>
+            <div class="movil-identity-card">
+              <div class="movil-identity-row">
+                <span class="movil-identity-label">Documento</span>
+                <span class="movil-identity-value" id="movilConfirmDip">—</span>
+              </div>
+              <div class="movil-identity-row">
+                <span class="movil-identity-label">Servicio</span>
+                <span class="movil-identity-value" id="movilConfirmServicio">Portal Principal</span>
+              </div>
+              <div class="movil-identity-row">
+                <span class="movil-identity-label">Método</span>
+                <span class="movil-identity-value">🔐 Biométrico / PIN de app</span>
+              </div>
+            </div>
+            <div class="movil-btn-row">
+              <button class="btn btn-ghost" onclick="movilIrPaso1()">
+                ← Atrás
+              </button>
+              <button class="btn btn-primary" id="btnMovilConfirm" onclick="movilSolicitar()">
+                Solicitar autorización →
+              </button>
+            </div>
+          </div>
+
+          <!-- ── Paso 3/3: Código y apertura de app ── -->
+          <div class="movil-step" id="movilStep3" style="display:none;">
+            <div class="movil-step-header">
+              <div class="movil-app-icon movil-app-icon-pulse">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </div>
+              <div class="movil-step-badge">Paso 3 de 3</div>
+            </div>
+            <h2 class="movil-title">Notificación enviada</h2>
+            <p class="movil-desc">Abre tu app <strong>PlacetaID Móvil</strong> y autoriza el acceso con tu huella, rostro o PIN.</p>
+
+            <div class="movil-code-box" id="movilCodeBox" style="display:none;">
+              <span class="movil-code-label">Código de verificación</span>
+              <span class="movil-code-value" id="movilCodigo"></span>
+            </div>
+
+            <div id="movilRequestResult" style="margin-top:0.75rem;"></div>
+
+            <button class="btn btn-primary btn-full" id="btnMovilOpenApp" onclick="abrirPlacetaIDMovil()" style="display:none;">
               📱 Abrir PlacetaID Móvil
             </button>
-            <p class="movil-hint">
-              La app se abrirá automáticamente. Si no la tienes instalada,
-              <a href="#" onclick="volverAMetodos();return false;" style="color:var(--accent);">elige otro método</a>.
-            </p>
+
+            <div id="movilPollLoader" style="text-align:center;padding:0.75rem 0;display:none;">
+              <div class="movil-spinner"></div>
+              <p class="movil-loader-text">Esperando autorización...</p>
+            </div>
+
+            <div class="movil-hint-box" id="movilHintBox">
+              <p>¿No tienes la app instalada?</p>
+              <a href="#" onclick="volverAMetodos();return false;">Elige otro método de acceso</a>
+            </div>
+
+            <button class="btn btn-ghost btn-full" onclick="volverAMetodos()" id="btnMovilBack" style="margin-top:0.5rem;">
+              ← Volver a métodos
+            </button>
           </div>
-          <button class="btn btn-ghost btn-full btn-back" onclick="volverAMetodos()">
-            ← Volver a métodos
-          </button>
+
+          <!-- ── Barra de progreso ── -->
+          <div class="movil-progress">
+            <div class="movil-progress-bar" id="movilProgressBar"></div>
+          </div>
+
         </div>
 
         <!-- ── FASE 2 ── -->
@@ -2223,6 +2519,25 @@ textarea.form-input { resize: vertical; }
             <label class="form-label">Descripción</label>
             <textarea class="form-input" id="solDescripcion" style="height:72px;" placeholder="Qué producto usa PLID26 y para qué solicita identificación."></textarea>
           </div>
+          <div class="two-col">
+            <div class="form-group">
+              <label class="form-label">🎨 Color de fondo (hex)</label>
+              <div style="display:flex;gap:0.5rem;align-items:center;">
+                <input class="form-input" id="solBgColor" type="color" value="#1c005f" style="width:48px;height:44px;padding:4px;cursor:pointer;flex:none;">
+                <input class="form-input" id="solBgColorText" type="text" placeholder="#1c005f" value="#1c005f" maxlength="7" style="flex:1;" oninput="document.getElementById('solBgColor').value=this.value">
+              </div>
+              <span class="form-help">El fondo se ajustará automáticamente. Blanco sobre oscuro, negro sobre claro.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">🖼 Logo del solicitante</label>
+              <input class="form-input" type="file" id="solLogoFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="previewSolicitanteLogo(this)" style="padding:0.5rem;">
+              <input type="hidden" id="solLogo" value="">
+              <div id="solLogoPreview" style="margin-top:0.4rem;display:none;">
+                <img id="solLogoImg" style="max-height:64px;max-width:100%;border-radius:8px;background:rgba(255,255,255,0.05);padding:4px;">
+                <button class="btn btn-sm btn-ghost" onclick="clearSolicitanteLogo()" style="margin-top:0.25rem;">Quitar logo</button>
+              </div>
+            </div>
+          </div>
           <label class="checkbox-row">
             <input type="checkbox" id="solPkce" checked>
             Requerir flujo reforzado con estado/PKCE en apps compatibles.
@@ -2298,10 +2613,43 @@ function renderSolicitanteContext(info = {}) {
   state.solicitanteInfo = info;
   state.requestedServiceName = name;
 
+  // ── Aplicar branding dinámico (bgColor + logo) ──
+  const bgColor = info.bgColor || '';
+  if (bgColor) {
+    document.body.style.background = bgColor;
+    const landing = document.querySelector('.landing-bg');
+    if (landing) landing.style.background = bgColor;
+    // Ajustar legibilidad: si el color es claro, texto oscuro; si oscuro, texto blanco
+    const isLight = isLightColor(bgColor);
+    document.body.style.color = isLight ? '#111' : '#fff';
+    document.documentElement.style.setProperty('--dynamic-text', isLight ? '#111' : '#fff');
+    document.documentElement.style.setProperty('--dynamic-text-muted', isLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)');
+    document.documentElement.style.setProperty('--dynamic-surface', isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.07)');
+  }
+
+  // ── Mostrar logo del solicitante ──
+  const logoUrl = info.logo || '';
+  const logoWrap = document.getElementById('solicitanteLogoWrap');
+  const logoImg = document.getElementById('solicitanteLogoImg');
+  if (logoWrap && logoImg && logoUrl) {
+    logoImg.src = logoUrl;
+    logoWrap.style.display = '';
+  } else if (logoWrap) {
+    logoWrap.style.display = 'none';
+  }
+
   const serviceInput = document.getElementById('loginServicio');
   if (serviceInput) serviceInput.value = name;
   const icon = document.getElementById('requestIcon');
-  if (icon) icon.textContent = initials(name);
+  if (icon) {
+    if (logoUrl) {
+      icon.innerHTML = `<img src="${escapeAttr(logoUrl)}" alt="${escapeAttr(name)}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;">`;
+      icon.style.background = 'transparent';
+    } else {
+      icon.textContent = initials(name);
+      icon.style.background = '';
+    }
+  }
   const serviceName = document.getElementById('requestServiceName');
   if (serviceName) serviceName.textContent = name;
   const meta = document.getElementById('requestServiceMeta');
@@ -2314,6 +2662,17 @@ function renderSolicitanteContext(info = {}) {
   if (alertContainer && redirectUrl) {
     alertContainer.innerHTML = `<div class="alert alert-info"><strong>${escapeHtml(name)}</strong> solicita confirmar tu identidad. PlacetaID solo compartirá tu sesión tras validar DIP y 2FA.</div>`;
   }
+}
+
+// ── Helper: detecta si un color hex es claro ──
+function isLightColor(hex) {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  // Fórmula de luminancia percibida (ITU-R BT.709)
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum > 0.55;
 }
 
 function platformLabel(value) {
@@ -2430,6 +2789,10 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(value) {
+  return String(value ?? '').replace(/"/g, '&quot;').replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
 // ── LOGIN FASE 1 ──────────────────────────────────────────────────────────────
@@ -2586,9 +2949,17 @@ function irAlPanel() { showView('dashboard'); }
 function selectMethod(method) {
   document.getElementById('methodSelector').style.display = 'none';
   document.getElementById('movilPanel').style.display = 'none';
-  document.getElementById('movilOpenApp').style.display = 'none';
+  // Reset movil multi-step state
+  document.getElementById('movilStep1').style.display = '';
+  document.getElementById('movilStep2').style.display = 'none';
+  document.getElementById('movilStep3').style.display = 'none';
+  document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('btnMovilOpenApp').style.display = 'none';
+  document.getElementById('movilPollLoader').style.display = 'none';
+  document.getElementById('movilProgressBar').style.width = '33.33%';
   document.getElementById('movilRequestResult').innerHTML = '';
   document.getElementById('movilDip').value = '';
+  if (movilPollTimer) { clearTimeout(movilPollTimer); movilPollTimer = null; }
 
   if (method === '2fa') {
     document.getElementById('fase1Panel').style.display = '';
@@ -2610,15 +2981,49 @@ function volverAMetodos() {
   document.getElementById('fase1Panel').style.display = 'none';
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('movilPanel').style.display = 'none';
-  document.getElementById('movilOpenApp').style.display = 'none';
+  // Reset movil steps
+  document.getElementById('movilStep1').style.display = '';
+  document.getElementById('movilStep2').style.display = 'none';
+  document.getElementById('movilStep3').style.display = 'none';
+  document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('btnMovilOpenApp').style.display = 'none';
+  document.getElementById('movilPollLoader').style.display = 'none';
+  document.getElementById('movilProgressBar').style.width = '33.33%';
   document.getElementById('movilRequestResult').innerHTML = '';
   document.getElementById('movilDip').value = '';
+  if (movilPollTimer) { clearTimeout(movilPollTimer); movilPollTimer = null; }
   document.getElementById('stepsContainer').style.display = '';
   document.getElementById('loginDip').value = '';
   document.getElementById('loginPass').value = '';
   document.getElementById('login2fa').value = '';
   alert_('loginAlert', '');
   resetSteps();
+}
+
+// ── Movil multi-step navigation ──
+
+function movilIrPaso2() {
+  const dip = document.getElementById('movilDip').value.trim().toUpperCase().replace(/[\s-]+/g, '');
+  if (!dip || dip.length < 9) {
+    document.getElementById('movilRequestResult').innerHTML = '<div class="alert alert-error">Introduce un DIP válido (8 dígitos + letra)</div>';
+    return;
+  }
+  document.getElementById('movilRequestResult').innerHTML = '';
+  // Fill confirmation card
+  document.getElementById('movilConfirmDip').textContent = dip;
+  const servicio = document.getElementById('loginServicio').value.trim() || 'Portal Principal';
+  document.getElementById('movilConfirmServicio').textContent = servicio;
+  // Switch to step 2
+  document.getElementById('movilStep1').style.display = 'none';
+  document.getElementById('movilStep2').style.display = '';
+  document.getElementById('movilProgressBar').style.width = '66.66%';
+}
+
+function movilIrPaso1() {
+  document.getElementById('movilStep2').style.display = 'none';
+  document.getElementById('movilStep1').style.display = '';
+  document.getElementById('movilProgressBar').style.width = '33.33%';
+  document.getElementById('movilRequestResult').innerHTML = '';
 }
 
 async function movilSolicitar() {
@@ -2629,10 +3034,10 @@ async function movilSolicitar() {
   }
 
   const servicio = document.getElementById('loginServicio').value.trim() || 'Portal Principal';
-  document.getElementById('btnMovilRequest').disabled = true;
-  document.getElementById('btnMovilRequest').innerHTML = '<span class="spinner"></span>';
+  const btnConfirm = document.getElementById('btnMovilConfirm');
+  btnConfirm.disabled = true;
+  btnConfirm.innerHTML = '<span class="spinner"></span> Enviando...';
   document.getElementById('movilRequestResult').innerHTML = '';
-  document.getElementById('movilOpenApp').style.display = 'none';
 
   try {
     const res = await fetch('/api/mobil/request', {
@@ -2645,18 +3050,27 @@ async function movilSolicitar() {
     if (!res.ok) {
       document.getElementById('movilRequestResult').innerHTML =
         `<div class="alert alert-error">${data.error || 'Error al generar solicitud'}</div>`;
-      document.getElementById('btnMovilRequest').disabled = false;
-      document.getElementById('btnMovilRequest').innerHTML = 'Solicitar autorización →';
+      btnConfirm.disabled = false;
+      btnConfirm.innerHTML = 'Solicitar autorización →';
       return;
     }
 
+    // Switch to step 3
+    document.getElementById('movilStep2').style.display = 'none';
+    document.getElementById('movilStep3').style.display = '';
+    document.getElementById('movilProgressBar').style.width = '100%';
+
     // Show code and open app button
     document.getElementById('movilCodigo').textContent = data.codigo;
+    document.getElementById('movilCodeBox').style.display = '';
+    document.getElementById('btnMovilOpenApp').style.display = '';
+    document.getElementById('movilPollLoader').style.display = '';
+    document.getElementById('movilHintBox').style.display = '';
     document.getElementById('movilRequestResult').innerHTML =
-      `<div class="alert alert-success">✅ Solicitud enviada. Revisa tu app PlacetaID Móvil.</div>`;
-    document.getElementById('movilOpenApp').style.display = '';
-    document.getElementById('btnMovilRequest').disabled = false;
-    document.getElementById('btnMovilRequest').innerHTML = 'Solicitar autorización →';
+      '<div class="alert alert-success">✅ Solicitud enviada. Revisa tu app PlacetaID Móvil.</div>';
+
+    btnConfirm.disabled = false;
+    btnConfirm.innerHTML = 'Solicitar autorización →';
 
     // Poll for result
     movilPollRequest(data.requestId, dip);
@@ -2664,8 +3078,8 @@ async function movilSolicitar() {
   } catch (err) {
     document.getElementById('movilRequestResult').innerHTML =
       '<div class="alert alert-error">Error de conexión. Inténtalo de nuevo.</div>';
-    document.getElementById('btnMovilRequest').disabled = false;
-    document.getElementById('btnMovilRequest').innerHTML = 'Solicitar autorización →';
+    btnConfirm.disabled = false;
+    btnConfirm.innerHTML = 'Solicitar autorización →';
   }
 }
 
@@ -2679,6 +3093,7 @@ async function movilPollRequest(requestId, dip) {
     if (attempts >= maxAttempts) {
       document.getElementById('movilRequestResult').innerHTML =
         '<div class="alert alert-warning">⏱ La solicitud ha expirado. Intenta de nuevo.</div>';
+      document.getElementById('movilPollLoader').style.display = 'none';
       return;
     }
     attempts++;
@@ -2690,6 +3105,9 @@ async function movilPollRequest(requestId, dip) {
       if (data.autorizado === true && data.tokenSesion) {
         // Authorized! Complete login
         if (movilPollTimer) { clearTimeout(movilPollTimer); movilPollTimer = null; }
+        document.getElementById('movilPollLoader').style.display = 'none';
+        document.getElementById('movilRequestResult').innerHTML =
+          '<div class="alert alert-success">✅ ¡Acceso autorizado! Redirigiendo...</div>';
         finishLogin(data);
         return;
       }
@@ -2697,18 +3115,16 @@ async function movilPollRequest(requestId, dip) {
       if (data.autorizado === false && data.estado === 'denied') {
         document.getElementById('movilRequestResult').innerHTML =
           '<div class="alert alert-warning">✗ Solicitud denegada desde la app.</div>';
-        document.getElementById('btnMovilRequest').disabled = false;
-        document.getElementById('btnMovilRequest').innerHTML = 'Solicitar autorización →';
-        document.getElementById('movilOpenApp').style.display = 'none';
+        document.getElementById('movilPollLoader').style.display = 'none';
+        document.getElementById('btnMovilOpenApp').style.display = 'none';
         return;
       }
 
       if (data.autorizado === false && data.estado === 'expired') {
         document.getElementById('movilRequestResult').innerHTML =
           '<div class="alert alert-warning">⏱ La solicitud ha expirado.</div>';
-        document.getElementById('btnMovilRequest').disabled = false;
-        document.getElementById('btnMovilRequest').innerHTML = 'Solicitar autorización →';
-        document.getElementById('movilOpenApp').style.display = 'none';
+        document.getElementById('movilPollLoader').style.display = 'none';
+        document.getElementById('btnMovilOpenApp').style.display = 'none';
         return;
       }
     } catch (_) {}
@@ -2748,7 +3164,14 @@ function resetLogin() {
   document.getElementById('fase1Panel').style.display = 'none';
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('movilPanel').style.display = 'none';
-  document.getElementById('movilOpenApp').style.display = 'none';
+  // Reset movil multi-step
+  document.getElementById('movilStep1').style.display = '';
+  document.getElementById('movilStep2').style.display = 'none';
+  document.getElementById('movilStep3').style.display = 'none';
+  document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('btnMovilOpenApp').style.display = 'none';
+  document.getElementById('movilPollLoader').style.display = 'none';
+  document.getElementById('movilProgressBar').style.width = '33.33%';
   document.getElementById('movilRequestResult').innerHTML = '';
   document.getElementById('resultPanel').style.display = 'none';
   document.getElementById('loginDip').value = '';
@@ -2758,6 +3181,19 @@ function resetLogin() {
   if (movilPollTimer) { clearTimeout(movilPollTimer); movilPollTimer = null; }
   alert_('loginAlert', '');
   resetSteps();
+  // Restaurar colores por defecto
+  resetDynamicBranding();
+}
+
+// ── Restaurar branding por defecto ──
+function resetDynamicBranding() {
+  document.body.style.background = '';
+  document.body.style.color = '';
+  const landing = document.querySelector('.landing-bg');
+  if (landing) landing.style.background = '';
+  document.documentElement.style.setProperty('--dynamic-text', '#fff');
+  document.documentElement.style.setProperty('--dynamic-text-muted', 'rgba(255,255,255,0.5)');
+  document.documentElement.style.setProperty('--dynamic-surface', 'rgba(255,255,255,0.07)');
 }
 
 // ── MOBILE SIDEBAR TOGGLE ────────────────────────────────────────────────────
@@ -2917,6 +3353,40 @@ function mostrarFormCrearSolicitante() {
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
+// ── Logo helper functions ──
+function previewSolicitanteLogo(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 256 * 1024) {
+    alert('El logo no puede superar los 256KB');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    document.getElementById('solLogo').value = dataUrl;
+    document.getElementById('solLogoImg').src = dataUrl;
+    document.getElementById('solLogoPreview').style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearSolicitanteLogo() {
+  document.getElementById('solLogo').value = '';
+  document.getElementById('solLogoFile').value = '';
+  document.getElementById('solLogoPreview').style.display = 'none';
+}
+
+// Sync color text ↔ color picker
+document.addEventListener('DOMContentLoaded', () => {
+  const colorPicker = document.getElementById('solBgColor');
+  const colorText = document.getElementById('solBgColorText');
+  if (colorPicker && colorText) {
+    colorPicker.addEventListener('input', () => { colorText.value = colorPicker.value; });
+  }
+});
+
 async function crearSolicitante() {
   const nombre = document.getElementById('solNombre').value.trim();
   const descripcion = document.getElementById('solDescripcion').value.trim();
@@ -2932,6 +3402,8 @@ async function crearSolicitante() {
   const deepLinkHost = document.getElementById('solDeepLinkHost').value.trim();
   const pkceRequired = document.getElementById('solPkce').checked;
   const permitirWebFallback = document.getElementById('solWebFallback').checked;
+  const logo = document.getElementById('solLogo').value;
+  const bgColor = document.getElementById('solBgColorText').value.trim() || document.getElementById('solBgColor').value;
 
   if (!nombre || (!urlOrigen && !redirectUris.length)) {
     alert('Nombre y al menos un callback son obligatorios');
@@ -2951,7 +3423,9 @@ async function crearSolicitante() {
       bundleId,
       deepLinkHost,
       pkceRequired,
-      permitirWebFallback
+      permitirWebFallback,
+      logo,
+      bgColor
     })
   });
 
@@ -2972,6 +3446,11 @@ async function crearSolicitante() {
   document.getElementById('solPlataforma').value = 'multiplataforma';
   document.getElementById('solPkce').checked = true;
   document.getElementById('solWebFallback').checked = true;
+  document.getElementById('solBgColor').value = '#1c005f';
+  document.getElementById('solBgColorText').value = '#1c005f';
+  document.getElementById('solLogo').value = '';
+  document.getElementById('solLogoFile').value = '';
+  document.getElementById('solLogoPreview').style.display = 'none';
   document.getElementById('formCrearSolicitante').style.display = 'none';
   cargarSolicitantes();
 }
@@ -3018,11 +3497,13 @@ async function cargarSolicitantes() {
     const uriHtml = callbacks.slice(0, 3).map(uri => `<code title="${escapeHtml(uri)}">${escapeHtml(uri)}</code>`).join('');
     const extra = callbacks.length > 3 ? `<code>+${callbacks.length - 3} callbacks mas</code>` : '';
     const appMeta = [s.packageName, s.bundleId, s.appScheme].filter(Boolean).map(item => `<span class="badge badge-gray">${escapeHtml(item)}</span>`).join('');
+    const logoPreview = s.logo ? `<img src="${escapeAttr(s.logo)}" alt="" style="height:36px;max-width:120px;object-fit:contain;border-radius:4px;margin-right:0.5rem;">` : '';
+    const colorDot = s.bgColor ? `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${escapeAttr(s.bgColor)};border:1px solid rgba(255,255,255,0.2);margin-right:0.3rem;vertical-align:middle;"></span>` : '';
     return `<article class="client-card">
       <div class="client-card-head">
         <div>
-          <h3>${escapeHtml(s.nombre)}</h3>
-          <p>${escapeHtml(s.descripcion || 'Sin descripcion')}</p>
+          <h3>${logoPreview}${escapeHtml(s.nombre)}</h3>
+          <p>${colorDot}${escapeHtml(s.bgColor || '—')} · ${escapeHtml(s.descripcion || 'Sin descripcion')}</p>
         </div>
         ${s.activo ? '<span class="badge badge-green">Activo</span>' : '<span class="badge badge-gray">Inactivo</span>'}
       </div>
@@ -3035,6 +3516,7 @@ async function cargarSolicitantes() {
       <div class="client-callbacks uri-list">${uriHtml}${extra}</div>
       <div class="client-card-actions">
       <button class="btn btn-sm btn-ghost" onclick="verInstrucciones('${s._id}')">Instrucciones</button>
+      <button class="btn btn-sm btn-ghost" onclick="editarBrandingSolicitante('${s._id}')">🎨 Branding</button>
       <button class="btn btn-sm btn-danger" onclick="eliminarSolicitante('${s._id}')">Eliminar</button>
       </div>
     </article>`;
@@ -3102,6 +3584,36 @@ async function eliminarSolicitante(id) {
     cargarSolicitantes();
   } else {
     alert(`❌ Error: ${data.error}`);
+  }
+}
+
+// ── Editar branding (logo + color) de solicitante ──
+async function editarBrandingSolicitante(id) {
+  const token = localStorage.getItem('tokenSesion');
+  // Cargar datos actuales
+  const res = await fetch(`/api/admin/solicitantes/${id}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) { alert('Error al cargar solicitante'); return; }
+
+  const currentLogo = data.logo || '';
+  const currentBg = data.bgColor || '#1c005f';
+
+  const newBg = prompt('🎨 Color de fondo (hex, ej: #1c005f):', currentBg);
+  if (newBg === null) return; // Cancelado
+
+  const patchRes = await fetch(`/api/admin/solicitantes/${id}/branding`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ bgColor: newBg || '', logo: currentLogo })
+  });
+  const patchData = await patchRes.json();
+  if (patchData.ok) {
+    alert('✅ Color actualizado. Para cambiar el logo, edita el solicitante.');
+    cargarSolicitantes();
+  } else {
+    alert(`❌ Error: ${patchData.error}`);
   }
 }
 </script>

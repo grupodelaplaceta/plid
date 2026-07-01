@@ -180,6 +180,8 @@ const solicitanteSchema = new mongoose.Schema({
   pkceRequired: { type: Boolean, default: true },
   permitirWebFallback: { type: Boolean, default: true },
   apiKey: { type: String, required: true, unique: true }, // Clave única para validar
+  logo: { type: String, trim: true, default: '' },        // URL o data URI del logo
+  bgColor: { type: String, trim: true, default: '' },     // Color de fondo hex (#1c005f)
   activo: { type: Boolean, default: true },
   creadoPor: { type: mongoose.Schema.Types.ObjectId, ref: 'Registro' }, // Admin que lo creó
   creadoEn: { type: Date, default: Date.now },
