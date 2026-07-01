@@ -1246,7 +1246,7 @@ app.post('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) 
     bundleId,
     deepLinkHost,
     pkceRequired = true,
-    permitirWebFallback = true
+    permitirWebFallback = true,
     logo = '',
     bgColor = ''
   } = req.body;
