@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PlacetaID — Pasarela de Identificación</title>
 <link rel="icon" type="image/png" href="assets/faviid.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════════════════════
@@ -2837,8 +2838,6 @@ async function cargarContextoSolicitante() {
 
   renderSolicitanteContext();
   if (!clientId) {
-    // Sin clientId, splash breve (solo para transición suave)
-    await new Promise(r => setTimeout(r, 600));
     ocultarSplash();
     return;
   }
@@ -2851,16 +2850,12 @@ async function cargarContextoSolicitante() {
     mostrarSplashConBranding(info);
     renderSolicitanteContext(info);
 
-    // Mínimo tiempo de splash para transición suave
-    await new Promise(r => setTimeout(r, 800));
     ocultarSplash();
   } catch {
     const alertContainer = document.getElementById('solicitanteAlert');
     const trustPill = document.getElementById('requestTrust');
     if (trustPill) trustPill.textContent = 'Cliente pendiente';
     if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>No se ha podido verificar el solicitante.</strong> Continúa solo si reconoces este acceso.</div>';
-    // Mínimo tiempo de splash
-    await new Promise(r => setTimeout(r, 600));
     ocultarSplash();
   }
 }

@@ -75,19 +75,46 @@ app.use('/api/auth/', authLimiter);
 // ── MONGODB ───────────────────────────────────────────────────────────────────
 let isConnected = false;
 
+// ── Caché en memoria ─────────────────────────────────────────────────────────
+const cache = {
+  solicitantes: new Map(), // apiKey -> { info, expiresAt }
+  SOLICITANTE_TTL: 60_000 // 1 minuto
+};
+
+function getCachedSolicitante(apiKey) {
+  const entry = cache.solicitantes.get(apiKey);
+  if (entry && entry.expiresAt > Date.now()) return entry.info;
+  return null;
+}
+
+function setCachedSolicitante(apiKey, info) {
+  cache.solicitantes.set(apiKey, { info, expiresAt: Date.now() + cache.SOLICITANTE_TTL });
+}
+
+function invalidateSolicitanteCache(apiKey) {
+  cache.solicitantes.delete(apiKey);
+}
+
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 async function connectToDatabase() {
   if (isConnected) return;
 
   try {
     console.log('🔌 MongoDB connection attempt...');
-    console.log('   MONGO_URI:', process.env.MONGO_URI ? `${process.env.MONGO_URI.substring(0, 40)}...` : 'NOT SET');
 
     await mongoose.connect(MONGO_URI, {
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000,
+      heartbeatFrequencyMS: 10000
     });
 
     isConnected = true;
+    reconnectAttempts = 0;
     console.log(`✅ MongoDB conectado`);
 
     // Drop legacy non-sparse supportNumber index so mongoose can recreate it as sparse
@@ -98,24 +125,52 @@ async function connectToDatabase() {
       // Index did not exist or was already dropped, which is fine
     }
 
-    await backfillSupportNumbers();
-    await ensureBuiltinPendingMigrations();
-    await ensureBuiltinSolicitantes();
+    // Operaciones post-conexión en paralelo y sin bloquear el arranque
+    Promise.all([
+      backfillSupportNumbers(),
+      ensureBuiltinPendingMigrations(),
+      ensureBuiltinSolicitantes()
+    ]).catch(err => console.error('Error en operaciones post-conexión:', err.message));
   } catch (err) {
     console.error('❌ Error MongoDB:', err.message);
-    console.error('   Code:', err.code);
-    console.error('   Name:', err.name);
+    isConnected = false;
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectAttempts++;
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      console.log(`⏳ Reintento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} en ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      return connectToDatabase();
+    }
     throw err;
   }
 }
 
-// Middleware to ensure DB connection
+// Reconexión automática en caso de pérdida de conexión
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️ MongoDB desconectado. Intentando reconectar...');
+  isConnected = false;
+  // Limpiar cachés al perder conexión
+  cache.solicitantes.clear();
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconectado');
+  isConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ Error de conexión MongoDB:', err.message);
+  isConnected = false;
+});
+
+// Middleware para asegurar conexión BD (non-blocking si ya conectado)
 app.use(async (req, res, next) => {
+  if (isConnected) return next();
   try {
     await connectToDatabase();
     next();
   } catch (err) {
-    res.status(500).json({ error: 'Database connection failed' });
+    res.status(503).json({ error: 'Database connection failed', detail: err.message });
   }
 });
 
@@ -180,9 +235,20 @@ async function ensureBuiltinSolicitantes() {
 async function findActiveSolicitante(apiKey) {
   const key = String(apiKey || '').trim();
   if (!key) return null;
+
+  // Intentar caché primero
+  const cached = getCachedSolicitante(key);
+  if (cached) return cached;
+
   const dbSolicitante = await Solicitante.findOne({ apiKey: key, activo: true });
-  if (dbSolicitante) return dbSolicitante;
-  return BUILTIN_SOLICITANTES.find(item => item.apiKey === key && item.activo) || null;
+  if (dbSolicitante) {
+    setCachedSolicitante(key, dbSolicitante);
+    return dbSolicitante;
+  }
+
+  const builtin = BUILTIN_SOLICITANTES.find(item => item.apiKey === key && item.activo);
+  if (builtin) setCachedSolicitante(key, builtin);
+  return builtin || null;
 }
 
 function verifyToken(req, res, next) {
@@ -296,20 +362,37 @@ async function generateUniqueSupportNumber() {
 
 async function backfillSupportNumbers() {
   try {
-    const users = await Registro.find({
+    const pendientes = await Registro.countDocuments({
       $or: [
         { supportNumber: { $exists: false } },
         { supportNumber: null }
       ]
     });
-    for (const user of users) {
-      try {
+
+    if (pendientes === 0) return;
+    console.log(`📋 Backfilling support numbers para ${pendientes} usuarios...`);
+
+    // Procesar en lotes eficientes
+    const BATCH_SIZE = 20;
+    let processed = 0;
+
+    while (processed < pendientes) {
+      const batch = await Registro.find({
+        $or: [
+          { supportNumber: { $exists: false } },
+          { supportNumber: null }
+        ]
+      }).limit(BATCH_SIZE);
+
+      if (batch.length === 0) break;
+
+      for (const user of batch) {
         user.supportNumber = await generateUniqueSupportNumber();
-        await user.save();
-        console.log(`Backfilled support number ${user.supportNumber} for user ${user.nombre}`);
-      } catch (saveErr) {
-        console.error(`Error saving user ${user.nombre} during backfill:`, saveErr.message);
       }
+      await Promise.all(batch.map(user => user.save()));
+
+      processed += batch.length;
+      console.log(`   Backfilled ${processed}/${pendientes} usuarios`);
     }
   } catch (err) {
     console.error('Error backfilling support numbers:', err);
@@ -1314,6 +1397,7 @@ app.delete('/api/admin/solicitantes/:id', verifyAdminApiKey, requireAdmin, async
   try {
     const solicitante = await Solicitante.findByIdAndDelete(req.params.id);
     if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
+    invalidateSolicitanteCache(solicitante.apiKey);
     res.json({ ok: true, mensaje: 'Solicitante eliminado' });
   } catch (err) {
     res.status(500).json({ error: 'Error' });
@@ -1345,6 +1429,7 @@ app.patch('/api/admin/solicitantes/:id/branding', verifyAdminApiKey, requireAdmi
 
     const solicitante = await Solicitante.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
+    invalidateSolicitanteCache(solicitante.apiKey);
     res.json({ ok: true, solicitante });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1835,15 +1920,14 @@ app.use((req, res) => {
 // ── INICIAR SERVIDOR ──────────────────────────────────────────────────────────
 // En desarrollo local, executar: npm start
 if (require.main === module) {
-  connectToDatabase()
-    .then(() => {
-      app.listen(PORT, () => {
-        console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-      });
-    })
-    .catch(err => {
+  // Arrancar servidor inmediatamente, sin esperar a MongoDB
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+    // Conectar a MongoDB en segundo plano
+    connectToDatabase().catch(err => {
       console.error('❌ Error conectando a MongoDB:', err);
     });
+  });
 }
 
 module.exports = app;
