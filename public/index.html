@@ -2877,11 +2877,8 @@ async function cargarContextoSolicitante() {
 
 setTimeout(() => { void cargarContextoSolicitante(); }, 50);
 
-// Inicializar UI admin solo si el usuario tiene rol administrador
-if (state.tokenSesion && state.user?.rol === 'administrador' && !redirectUrl) {
-  setAdminUI(true);
-  showView('dashboard');
-}
+// No hay panel admin en PlacetaID — todo se gestiona desde el CRM
+// Los administradores son redirigidos al CRM tras el login
 
 // ── NAVEGACIÓN ────────────────────────────────────────────────────────────────
 function showView(name) {
@@ -2891,24 +2888,10 @@ function showView(name) {
   if (v) v.classList.add('active');
   const n = document.getElementById('nav-' + name);
   if (n) n.classList.add('active');
-
-  if (name === 'dashboard') cargarDashboard();
-  if (name === 'registros') cargarRegistros();
-  if (name === 'logs') cargarLogs();
-  if (name === 'solicitantes') cargarSolicitantes();
 }
 
 function setAdminUI(show) {
-  const app = document.querySelector('.app');
-  if (show) {
-    app.classList.add('admin-mode');
-  } else {
-    app.classList.remove('admin-mode');
-  }
-  ['adminSection','nav-dashboard','nav-registros','nav-logs','nav-solicitantes','nav-logout'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = show ? '' : 'none';
-  });
+  // Panel admin eliminado de PlacetaID —todo gestionado desde el CRM
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -3046,6 +3029,12 @@ function finishLogin(data) {
     return;
   }
 
+  // Admin sin redirect específico → redirigir al CRM
+  if (data.adminRedirect) {
+    window.location.href = data.adminRedirect;
+    return;
+  }
+
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('step2').classList.remove('active');
   document.getElementById('step2').classList.add('done');
@@ -3082,14 +3071,7 @@ function finishLogin(data) {
 
     document.getElementById('resultPanel').style.display = '';
     document.getElementById('headerUser').textContent = `${reg.dip} · ${reg.rol}`;
-
-    if (reg.rol === 'administrador') {
-      setAdminUI(true);
-      document.getElementById('btnPanel').style.display = '';
-      document.getElementById('nav-logout').style.display = '';
-    } else {
-      document.getElementById('nav-logout').style.display = '';
-    }
+    document.getElementById('nav-logout').style.display = '';
   }, 3000);
 }
 
@@ -3119,7 +3101,7 @@ async function loginFase2() {
   finishLogin(data);
 }
 
-function irAlPanel() { showView('dashboard'); }
+// Panel admin eliminado — irAlPanel ya no aplica
 
 // ── MÉTODO DE AUTENTICACIÓN ──────────────────────────────────────────────────
 function selectMethod(method) {
@@ -3413,11 +3395,7 @@ function cerrarSesion() {
   state.user = null;
   state.tokenFase2 = null;
   // Sesión solo en memoria, no en localStorage
-  setAdminUI(false);
-  document.getElementById('nav-logout').style.display = 'none';
-  document.getElementById('headerUser').textContent = 'Sistema activo';
   resetLogin();
-  showView('login');
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
