@@ -3238,6 +3238,9 @@ async function movilSolicitar() {
     document.getElementById('movilRequestResult').innerHTML =
       '<div class="alert alert-success">✅ Solicitud enviada. Revisa tu app PlacetaID Móvil.</div>';
 
+    // Guardar requestId para el protocolo desktop
+    document.getElementById('movilPollLoader').dataset.requestId = data.requestId || '';
+
     // Cargar QR universal
     fetch('/api/mobil/qr').then(r => r.json()).then(qrData => {
       if (qrData.ok) {
@@ -3248,6 +3251,16 @@ async function movilSolicitar() {
 
     btnConfirm.disabled = false;
     btnConfirm.innerHTML = 'Solicitar autorización →';
+
+    // Intentar detectar PlacetaID Desktop y mostrar opción si está instalado
+    detectarDesktopApp().then(available => {
+      desktopAppAvailable = available;
+      if (available) {
+        document.getElementById('btnMovilOpenApp').textContent = '🖥️ Abrir PlacetaID Desktop';
+      } else {
+        document.getElementById('btnMovilOpenApp').textContent = '📱 Abrir PlacetaID Móvil';
+      }
+    });
 
     // Poll for result
     movilPollRequest(data.requestId, dip);
@@ -3312,21 +3325,57 @@ async function movilPollRequest(requestId, dip) {
   poll();
 }
 
+let desktopAppAvailable = null; // null=no comprobado, true/false
+
+function detectarDesktopApp() {
+  return new Promise(resolve => {
+    const img = new Image();
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) { resolved = true; resolve(false); }
+    }, 800);
+    // Intentar cargar un recurso del protocolo (fallará si no está instalado)
+    img.onerror = () => {
+      if (!resolved) { resolved = true; clearTimeout(timeout); resolve(true); }
+    };
+    img.src = 'placetaid-desktop://favicon.ico';
+  });
+}
+
 function abrirPlacetaIDMovil() {
   const codigo = document.getElementById('movilCodigo').textContent;
   const dip = document.getElementById('movilDip').value.trim().toUpperCase();
   const servicio = document.getElementById('loginServicio').value.trim() || 'Portal Principal';
   const redirectUrl = state.redirectUrl || '';
+  const requestId = document.getElementById('movilPollLoader')?.dataset?.requestId || '';
 
-  // Try deep link first
-  const deepLink = `placetaid-mobil://auth?action=authorize&codigo=${encodeURIComponent(codigo)}&dip=${encodeURIComponent(dip)}&servicio=${encodeURIComponent(servicio)}&redirect=${encodeURIComponent(redirectUrl)}`;
-  window.location.href = deepLink;
+  // Intentar lanzar PlacetaID Desktop primero
+  const desktopDeepLink = `placetaid-desktop://auth?requestId=${encodeURIComponent(requestId)}&codigo=${encodeURIComponent(codigo)}&dip=${encodeURIComponent(dip)}&servicio=${encodeURIComponent(servicio)}&redirect=${encodeURIComponent(redirectUrl)}`;
+  window.location.href = desktopDeepLink;
 
-  // Fallback: show instructions
+  // Si no se abre el escritorio, ofrecer opciones
   setTimeout(() => {
-    document.getElementById('movilRequestResult').innerHTML =
-      `<div class="alert alert-info">¿No se abre la app? Asegúrate de tener <strong>PlacetaID Móvil</strong> instalada y el DIP <strong>${dip}</strong> registrado en ella.</div>`;
-  }, 2000);
+    document.getElementById('movilRequestResult').innerHTML = `
+      <div class="alert alert-info" style="flex-direction:column;gap:12px;align-items:stretch;">
+        <p style="margin:0;font-size:14px;">📱 ¿Usas PlacetaID Desktop?</p>
+        <div style="display:flex;gap:8px;">
+          <a href="https://github.com/grupodelaplaceta/grupodelaplaceta/releases" target="_blank" class="btn btn-sm btn-primary" style="flex:1;text-decoration:none;font-size:12px;padding:8px;">
+            ⬇️ Descargar Desktop
+          </a>
+          <button class="btn btn-sm btn-ghost" style="flex:1;font-size:12px;padding:8px;" onclick="abrirPlacetaidMovilFallback('${encodeURIComponent(codigo)}','${encodeURIComponent(dip)}','${encodeURIComponent(servicio)}','${encodeURIComponent(redirectUrl)}')">
+            📱 Usar móvil
+          </button>
+        </div>
+      </div>`;
+    document.getElementById('btnMovilOpenApp').style.display = 'none';
+  }, 1500);
+}
+
+function abrirPlacetaidMovilFallback(codigo, dip, servicio, redirectUrl) {
+  const deepLink = `placetaid-mobil://auth?action=authorize&codigo=${codigo}&dip=${dip}&servicio=${servicio}&redirect=${redirectUrl}`;
+  window.location.href = deepLink;
+  document.getElementById('movilRequestResult').innerHTML = `
+    <div class="alert alert-info">¿No se abre la app? Asegúrate de tener <strong>PlacetaID Móvil</strong> instalada y el DIP <strong>${decodeURIComponent(dip)}</strong> registrado en ella.</div>`;
 }
 
 function resetSteps() {
