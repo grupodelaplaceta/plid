@@ -226,6 +226,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Middleware: permite acceso admin via X-API-Key (para CRM)
+function verifyAdminApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey && (apiKey === ADMIN_DESKTOP_CLIENT_ID || apiKey === process.env.PLACETAID_API_KEY)) {
+    req.user = { rol: 'administrador', apiKey: true };
+    return next();
+  }
+  verifyToken(req, res, next);
+}
+
 function normalizeRedirectUris(urlOrigen, redirectUris = []) {
   const raw = [
     urlOrigen,
@@ -1109,7 +1119,7 @@ app.post('/api/registro/link-dip', async (req, res) => {
 });
 
 // Banear indefinidamente o hasta x fecha
-app.post('/api/admin/ban', verifyToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/ban', verifyAdminApiKey, requireAdmin, async (req, res) => {
   const { dip, supportNumber, banned, bannedUntil } = req.body;
   try {
     const query = dip ? { dip: normalizeDip(dip) } : { supportNumber };
@@ -1146,7 +1156,7 @@ app.post('/api/admin/ban', verifyToken, requireAdmin, async (req, res) => {
 // El admin usa la pasarela normal.
 
 // Listar registros
-app.get('/api/admin/registros', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/registros', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const registros = await Registro.find({}, '-passwordHash -totpSecret').sort({ creadoEn: -1 });
     const result = registros.map(r => ({
@@ -1160,7 +1170,7 @@ app.get('/api/admin/registros', verifyToken, requireAdmin, async (req, res) => {
 });
 
 // Desbloquear cuenta
-app.post('/api/admin/desbloquear/:dip', verifyToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/desbloquear/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const registro = await Registro.findOne({ dip: normalizeDip(req.params.dip) });
     if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
@@ -1178,7 +1188,7 @@ app.post('/api/admin/desbloquear/:dip', verifyToken, requireAdmin, async (req, r
 });
 
 // Activar/desactivar registro
-app.post('/api/admin/toggle/:dip', verifyToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/toggle/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const registro = await Registro.findOne({ dip: normalizeDip(req.params.dip) });
     if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
@@ -1191,7 +1201,7 @@ app.post('/api/admin/toggle/:dip', verifyToken, requireAdmin, async (req, res) =
 });
 
 // Logs con filtros
-app.get('/api/admin/logs', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/logs', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const { dip, evento, limit = 100, page = 1 } = req.query;
     const filter = {};
@@ -1211,7 +1221,7 @@ app.get('/api/admin/logs', verifyToken, requireAdmin, async (req, res) => {
 });
 
 // Stats del dashboard
-app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/stats', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const [total, bloqueados, activos, logsHoy] = await Promise.all([
       Registro.countDocuments(),
@@ -1234,7 +1244,7 @@ app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
 
 // ── API: GESTIÓN DE SOLICITANTES (ADMIN) ──────────────────────────────────────
 // Crear solicitante
-app.post('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/solicitantes', verifyAdminApiKey, requireAdmin, async (req, res) => {
   const {
     nombre,
     descripcion,
@@ -1279,7 +1289,7 @@ app.post('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) 
 });
 
 // Listar solicitantes
-app.get('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/solicitantes', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const solicitantes = await Solicitante.find({}, '-apiKey').sort({ creadoEn: -1 });
     res.json(solicitantes);
@@ -1289,7 +1299,7 @@ app.get('/api/admin/solicitantes', verifyToken, requireAdmin, async (req, res) =
 });
 
 // Obtener solicitante con apiKey (para admin)
-app.get('/api/admin/solicitantes/:id', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/solicitantes/:id', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const solicitante = await Solicitante.findById(req.params.id);
     if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
@@ -1300,7 +1310,7 @@ app.get('/api/admin/solicitantes/:id', verifyToken, requireAdmin, async (req, re
 });
 
 // Eliminar solicitante
-app.delete('/api/admin/solicitantes/:id', verifyToken, requireAdmin, async (req, res) => {
+app.delete('/api/admin/solicitantes/:id', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const solicitante = await Solicitante.findByIdAndDelete(req.params.id);
     if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
@@ -1311,7 +1321,7 @@ app.delete('/api/admin/solicitantes/:id', verifyToken, requireAdmin, async (req,
 });
 
 // ── Subir logo de solicitante (base64, max 256KB) ──
-app.post('/api/admin/solicitantes/upload-logo', verifyToken, requireAdmin, async (req, res) => {
+app.post('/api/admin/solicitantes/upload-logo', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const { dataUrl } = req.body;
     if (!dataUrl || typeof dataUrl !== 'string') return res.status(400).json({ error: 'dataUrl requerido' });
@@ -1325,7 +1335,7 @@ app.post('/api/admin/solicitantes/upload-logo', verifyToken, requireAdmin, async
 });
 
 // ── Actualizar branding de solicitante (logo + bgColor) ──
-app.patch('/api/admin/solicitantes/:id/branding', verifyToken, requireAdmin, async (req, res) => {
+app.patch('/api/admin/solicitantes/:id/branding', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const { logo, bgColor } = req.body;
     const update = {};
@@ -1375,7 +1385,7 @@ app.get('/api/solicitante/info', async (req, res) => {
 });
 
 // Obtener instrucciones de implementación (admin)
-app.get('/api/admin/solicitantes/:id/instrucciones', verifyToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/solicitantes/:id/instrucciones', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
     const solicitante = await Solicitante.findById(req.params.id);
     if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
