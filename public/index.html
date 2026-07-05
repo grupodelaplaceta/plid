@@ -2831,7 +2831,7 @@ function ocultarSplash() {
 
 async function cargarContextoSolicitante() {
   // Si ya hay sesión admin activa, no mostrar splash
-  if (state.tokenSesion && !redirectUrl) return;
+  if (state.tokenSesion && state.user?.rol === 'administrador' && !redirectUrl) return;
 
   // Mostrar splash loading inmediatamente
   mostrarSplashConBranding();
