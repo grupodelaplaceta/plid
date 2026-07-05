@@ -99,7 +99,13 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 async function connectToDatabase() {
-  if (isConnected) return;
+  // Si ya estamos conectados realmente, salir
+  if (isConnected && mongoose.connection.readyState === 1) return;
+  // Si la bandera dice connected pero la conexión real está muerta, resetear
+  if (isConnected && mongoose.connection.readyState !== 1) {
+    isConnected = false;
+    cache.solicitantes.clear();
+  }
 
   try {
     console.log('🔌 MongoDB connection attempt...');
@@ -165,7 +171,14 @@ mongoose.connection.on('error', (err) => {
 
 // Middleware para asegurar conexión BD (non-blocking si ya conectado)
 app.use(async (req, res, next) => {
-  if (isConnected) return next();
+  // Verificar estado real de la conexión (mongoose.readyState: 0=disconnected, 1=connected, 2=connecting)
+  const connReady = mongoose.connection.readyState === 1;
+  if (isConnected && connReady) return next();
+  // Si isConnected es true pero la conexión real está muerta (caso Vercel serverless), resetear
+  if (isConnected && !connReady) {
+    isConnected = false;
+    cache.solicitantes.clear();
+  }
   try {
     await connectToDatabase();
     next();
