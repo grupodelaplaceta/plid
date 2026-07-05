@@ -1775,6 +1775,20 @@ app.post('/api/mobil/request', async (req, res) => {
       expiraEn: new Date(Date.now() + 5 * 60 * 1000) // 5 min
     });
 
+    // Registrar en auditoría
+    const registro = await Registro.findOne({ dip: cleanDip });
+    await registrarLog({
+      dip: cleanDip,
+      registroId: registro?._id,
+      servicio,
+      servicioUrl: servicioUrl || undefined,
+      evento: 'intento_exitoso',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      fase: 'móvil',
+      metadatos: { tipo: 'placetaid_movil_solicitud', codigo, requestId: authReq._id.toString(), plataforma: plataforma || 'web' }
+    });
+
     console.log(`📱 Solicitud ${codigo} creada para ${cleanDip} desde ${servicio}`);
 
     res.json({
@@ -1831,6 +1845,10 @@ app.post('/api/mobil/authorize', async (req, res) => {
     authReq.autorizadoEn = new Date();
     await authReq.save();
 
+    // Detectar origen (mobile app vs desktop app)
+    const ua = req.headers['user-agent'] || '';
+    const origenApp = ua.includes('Electron') || ua.includes('placetaid-desktop') ? 'desktop' : 'movil';
+
     // Log the event
     await registrarLog({
       dip: cleanDip,
@@ -1841,10 +1859,10 @@ app.post('/api/mobil/authorize', async (req, res) => {
       ip: getIP(req),
       ua: req.headers['user-agent'],
       fase: 'móvil',
-      metadatos: { tipo: 'placetaid_movil', codigo: authReq.codigo, requestId: authReq._id.toString() }
+      metadatos: { tipo: `placetaid_${origenApp}`, codigo: authReq.codigo, requestId: authReq._id.toString(), origen: origenApp }
     });
 
-    console.log(`📱 Solicitud ${authReq.codigo} ${authorized ? 'AUTORIZADA' : 'DENEGADA'} para ${cleanDip}`);
+    console.log(`📱 Solicitud ${authReq.codigo} ${authorized ? 'AUTORIZADA' : 'DENEGADA'} para ${cleanDip} (${origenApp})`);
 
     res.json({ ok: true, estado: authReq.estado, mensaje: authorized ? 'Solicitud autorizada' : 'Solicitud denegada' });
   } catch (err) {
