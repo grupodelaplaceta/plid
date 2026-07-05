@@ -136,7 +136,8 @@ async function connectToDatabase() {
     Promise.all([
       backfillSupportNumbers(),
       ensureBuiltinPendingMigrations(),
-      ensureBuiltinSolicitantes()
+      ensureBuiltinSolicitantes(),
+      ensureAdminUser()
     ]).catch(err => console.error('Error en operaciones post-conexión:', err.message));
   } catch (err) {
     console.error('❌ Error MongoDB:', err.message);
@@ -307,9 +308,15 @@ function requireAdmin(req, res, next) {
 }
 
 // Middleware: permite acceso admin via X-API-Key (para CRM)
+const CRM_API_KEY = 'ccb611655030bdadf7218418dc195dcb';
+const ADMIN_API_KEYS = new Set(
+  (process.env.PLACETAID_ADMIN_KEYS || `${ADMIN_DESKTOP_CLIENT_ID},${CRM_API_KEY}`)
+    .split(',').map(k => k.trim()).filter(Boolean)
+);
+
 function verifyAdminApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'];
-  if (apiKey && (apiKey === ADMIN_DESKTOP_CLIENT_ID || apiKey === process.env.PLACETAID_API_KEY)) {
+  if (apiKey && ADMIN_API_KEYS.has(apiKey)) {
     req.user = { rol: 'administrador', apiKey: true };
     return next();
   }
@@ -425,8 +432,45 @@ const DEMO_USER = {
   supportNumber: '11111111'
 };
 
+// Usuario administrador para el CRM — configurable via PLACETAID_ADMIN_DIP y PLACETAID_ADMIN_PASSWORD
+const ADMIN_DIP = process.env.PLACETAID_ADMIN_DIP || '23749931M';
+const ADMIN_PASSWORD = process.env.PLACETAID_ADMIN_PASSWORD || 'Admin23749931!';
+
 function isDemoLogin(dip, password) {
   return normalizeDip(dip) === DEMO_USER.dip && password === DEMO_USER.password;
+}
+
+async function ensureAdminUser() {
+  const existing = await Registro.findOne({ dip: ADMIN_DIP });
+  if (existing) {
+    existing.rol = 'administrador';
+    existing.bloqueado = false;
+    existing.activo = true;
+    existing.twoFactorDisabled = true;
+    existing.totpVerified = false;
+    if (!existing.passwordHash) existing.passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    await existing.save();
+    console.log(`✅ Admin ${ADMIN_DIP} actualizado con rol administrador`);
+    return existing;
+  }
+
+  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+  const totp = speakeasy.generateSecret({ name: `PlacetaID:${ADMIN_DIP}`, issuer: 'Grupo de La Placeta', length: 20 });
+  const registro = await Registro.create({
+    dip: ADMIN_DIP,
+    placeid: `PLID-${ADMIN_DIP}`,
+    correo: 'admin@laplaceta.org',
+    nombre: 'Administrador',
+    apellidos: 'CRM',
+    fechaNacimiento: new Date('1990-01-01'),
+    rol: 'administrador',
+    passwordHash,
+    totpSecret: totp.base32,
+    totpVerified: false,
+    twoFactorDisabled: true
+  });
+  console.log(`✅ Admin ${ADMIN_DIP} creado con rol administrador`);
+  return registro;
 }
 
 async function ensureDemoRegistration() {
