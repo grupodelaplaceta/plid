@@ -19,7 +19,6 @@ const JWT_EXPIRY = '5d'; // Tokens de 5 días según requerimiento
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
 const ADMIN_DESKTOP_CLIENT_ID = process.env.PLACETAID_ADMIN_DESKTOP_CLIENT_ID || 'administracion-gdlp';
 const ADMIN_DESKTOP_CALLBACK = process.env.PLACETAID_ADMIN_DESKTOP_CALLBACK || 'http://127.0.0.1:18731/callback';
-const CRM_ADMIN_URL = process.env.CRM_ADMIN_URL || 'https://grupodelaplaceta.vercel.app';
 const BUILTIN_PENDING_MIGRATIONS = [
   {
     dip: '20521220S',
@@ -29,6 +28,9 @@ const BUILTIN_PENDING_MIGRATIONS = [
     origen: 'migracion_gdlp'
   }
 ];
+const DESKTOP_CLIENT_ID = 'placetaid-desktop';
+const DESKTOP_CALLBACK = 'placetaid-desktop://auth';
+
 const BUILTIN_SOLICITANTES = [
   {
     nombre: 'Administracion GDLP',
@@ -40,6 +42,17 @@ const BUILTIN_SOLICITANTES = [
     activo: true,
     pkceRequired: false,
     permitirWebFallback: false
+  },
+  {
+    nombre: 'PlacetaID Desktop',
+    descripcion: 'Aplicacion de escritorio para autenticacion sin movil.',
+    plataforma: 'desktop',
+    urlOrigen: DESKTOP_CALLBACK,
+    redirectUris: [DESKTOP_CALLBACK],
+    apiKey: DESKTOP_CLIENT_ID,
+    activo: true,
+    pkceRequired: false,
+    permitirWebFallback: true
   }
 ];
 
@@ -533,8 +546,6 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
     { expiresIn: JWT_EXPIRY }
   );
 
-  const adminRedirect = datosRegistro.rol === 'administrador' ? CRM_ADMIN_URL : null;
-
   return {
     ok: true,
     tokenSesion,
@@ -543,8 +554,7 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
     plataforma: payload.platform || 'web',
     state: payload.state || null,
     expiresIn: 5 * 24 * 60 * 60,
-    requiere2fa: false,
-    adminRedirect
+    requiere2fa: false
   };
 }
 

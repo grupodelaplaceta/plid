@@ -3029,21 +3029,6 @@ function finishLogin(data) {
     return;
   }
 
-  // Admin sin redirect específico → redirigir al CRM vía callback con token
-  if (data.adminRedirect) {
-    const crmUrl = data.adminRedirect.replace(/\/+$/, '');
-    const callbackUrl = `${crmUrl}/placetid/callback`;
-    const params = new URLSearchParams();
-    params.set('placetaid_token', data.tokenSesion);
-    params.set('token', data.tokenSesion);
-    params.set('user', JSON.stringify(data.registro));
-    params.set('platform', data.plataforma || 'web');
-    params.set('expires_in', String(data.expiresIn || 3600));
-    if (data.state) params.set('state', data.state);
-    window.location.href = `${callbackUrl}?${params.toString()}`;
-    return;
-  }
-
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('step2').classList.remove('active');
   document.getElementById('step2').classList.add('done');
@@ -3252,15 +3237,11 @@ async function movilSolicitar() {
     btnConfirm.disabled = false;
     btnConfirm.innerHTML = 'Solicitar autorización →';
 
-    // Intentar detectar PlacetaID Desktop y mostrar opción si está instalado
-    detectarDesktopApp().then(available => {
-      desktopAppAvailable = available;
-      if (available) {
-        document.getElementById('btnMovilOpenApp').textContent = '🖥️ Abrir PlacetaID Desktop';
-      } else {
-        document.getElementById('btnMovilOpenApp').textContent = '📱 Abrir PlacetaID Móvil';
-      }
-    });
+    // Detectar si es un PC (no mobile) y cambiar botón a Desktop
+    const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+    if (!isMobile) {
+      document.getElementById('btnMovilOpenApp').textContent = '🖥️ Abrir PlacetaID Desktop';
+    }
 
     // Poll for result
     movilPollRequest(data.requestId, dip);
@@ -3325,22 +3306,9 @@ async function movilPollRequest(requestId, dip) {
   poll();
 }
 
-let desktopAppAvailable = null; // null=no comprobado, true/false
-
-function detectarDesktopApp() {
-  return new Promise(resolve => {
-    const img = new Image();
-    let resolved = false;
-    const timeout = setTimeout(() => {
-      if (!resolved) { resolved = true; resolve(false); }
-    }, 800);
-    // Intentar cargar un recurso del protocolo (fallará si no está instalado)
-    img.onerror = () => {
-      if (!resolved) { resolved = true; clearTimeout(timeout); resolve(true); }
-    };
-    img.src = 'placetaid-desktop://favicon.ico';
-  });
-}
+// Detectar PlacetaID Desktop: intentamos abrir el protocolo en segundo plano
+// Si se abre, el usuario lo notará. Si no, el timeout muestra las opciones.
+let desktopAppDetected = false;
 
 function abrirPlacetaIDMovil() {
   const codigo = document.getElementById('movilCodigo').textContent;
@@ -3349,26 +3317,38 @@ function abrirPlacetaIDMovil() {
   const redirectUrl = state.redirectUrl || '';
   const requestId = document.getElementById('movilPollLoader')?.dataset?.requestId || '';
 
-  // Intentar lanzar PlacetaID Desktop primero
-  const desktopDeepLink = `placetaid-desktop://auth?requestId=${encodeURIComponent(requestId)}&codigo=${encodeURIComponent(codigo)}&dip=${encodeURIComponent(dip)}&servicio=${encodeURIComponent(servicio)}&redirect=${encodeURIComponent(redirectUrl)}`;
-  window.location.href = desktopDeepLink;
+  // Comprobar si el botón muestra Desktop o Móvil
+  const btn = document.getElementById('btnMovilOpenApp');
+  const esDesktop = btn?.textContent?.includes('Desktop');
 
-  // Si no se abre el escritorio, ofrecer opciones
-  setTimeout(() => {
-    document.getElementById('movilRequestResult').innerHTML = `
-      <div class="alert alert-info" style="flex-direction:column;gap:12px;align-items:stretch;">
-        <p style="margin:0;font-size:14px;">📱 ¿Usas PlacetaID Desktop?</p>
-        <div style="display:flex;gap:8px;">
-          <a href="https://github.com/grupodelaplaceta/grupodelaplaceta/releases" target="_blank" class="btn btn-sm btn-primary" style="flex:1;text-decoration:none;font-size:12px;padding:8px;">
-            ⬇️ Descargar Desktop
-          </a>
-          <button class="btn btn-sm btn-ghost" style="flex:1;font-size:12px;padding:8px;" onclick="abrirPlacetaidMovilFallback('${encodeURIComponent(codigo)}','${encodeURIComponent(dip)}','${encodeURIComponent(servicio)}','${encodeURIComponent(redirectUrl)}')">
-            📱 Usar móvil
-          </button>
-        </div>
-      </div>`;
-    document.getElementById('btnMovilOpenApp').style.display = 'none';
-  }, 1500);
+  if (esDesktop) {
+    // Lanzar PlacetaID Desktop
+    const desktopDeepLink = `placetaid-desktop://auth?requestId=${encodeURIComponent(requestId)}&codigo=${encodeURIComponent(codigo)}&dip=${encodeURIComponent(dip)}&servicio=${encodeURIComponent(servicio)}&redirect=${encodeURIComponent(redirectUrl)}`;
+    window.location.href = desktopDeepLink;
+    // Fallback: si no se abre, mostrar opciones
+    setTimeout(() => {
+      document.getElementById('movilRequestResult').innerHTML = `
+        <div class="alert alert-info" style="flex-direction:column;gap:12px;align-items:stretch;">
+          <p style="margin:0;font-size:14px;">🖥️ ¿No se abre PlacetaID Desktop?</p>
+          <div style="display:flex;gap:8px;">
+            <a href="https://github.com/grupodelaplaceta/grupodelaplaceta/releases" target="_blank" class="btn btn-sm btn-primary" style="flex:1;text-decoration:none;font-size:12px;padding:8px;">
+              ⬇️ Descargar
+            </a>
+            <button class="btn btn-sm btn-ghost" style="flex:1;font-size:12px;padding:8px;" onclick="abrirPlacetaidMovilFallback('${encodeURIComponent(codigo)}','${encodeURIComponent(dip)}','${encodeURIComponent(servicio)}','${encodeURIComponent(redirectUrl)}')">
+              📱 Usar móvil
+            </button>
+          </div>
+        </div>`;
+    }, 1200);
+  } else {
+    // Lanzar PlacetaID Móvil
+    abrirPlacetaidMovilFallback(
+      encodeURIComponent(codigo),
+      encodeURIComponent(dip),
+      encodeURIComponent(servicio),
+      encodeURIComponent(redirectUrl)
+    );
+  }
 }
 
 function abrirPlacetaidMovilFallback(codigo, dip, servicio, redirectUrl) {
