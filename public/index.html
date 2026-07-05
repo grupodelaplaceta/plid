@@ -3029,9 +3029,18 @@ function finishLogin(data) {
     return;
   }
 
-  // Admin sin redirect específico → redirigir al CRM
+  // Admin sin redirect específico → redirigir al CRM vía callback con token
   if (data.adminRedirect) {
-    window.location.href = data.adminRedirect;
+    const crmUrl = data.adminRedirect.replace(/\/+$/, '');
+    const callbackUrl = `${crmUrl}/placetid/callback`;
+    const params = new URLSearchParams();
+    params.set('placetaid_token', data.tokenSesion);
+    params.set('token', data.tokenSesion);
+    params.set('user', JSON.stringify(data.registro));
+    params.set('platform', data.plataforma || 'web');
+    params.set('expires_in', String(data.expiresIn || 3600));
+    if (data.state) params.set('state', data.state);
+    window.location.href = `${callbackUrl}?${params.toString()}`;
     return;
   }
 
