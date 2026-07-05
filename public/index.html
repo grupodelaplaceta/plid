@@ -1275,6 +1275,89 @@ textarea.form-input { resize: vertical; }
   font-weight: 500;
 }
 
+/* ══ LOADING OVERLAY (Splash — PlacetaID Móvil style) ══ */
+#loadingOverlay {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #1c005f;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease, background 0.5s ease;
+}
+#loadingOverlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.splash-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  animation: splashFadeIn 0.6s ease both;
+}
+@keyframes splashFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.splash-icon-wrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+  box-shadow: 0 0 30px rgba(255,255,255,0.08);
+}
+.splash-icon-wrap svg {
+  width: 36px;
+  height: 36px;
+  opacity: 0.9;
+}
+.splash-title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #fff;
+  line-height: 1.1;
+}
+.splash-title em {
+  font-style: normal;
+  color: rgba(255,255,255,0.65);
+}
+.splash-subtitle {
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.7);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.splash-spinner-wrap {
+  margin-top: 0.75rem;
+}
+.splash-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: splashSpin 0.8s linear infinite;
+}
+@keyframes splashSpin {
+  to { transform: rotate(360deg); }
+}
+.splash-brand {
+  margin-top: 1.5rem;
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
 /* ══ SUCCESS OVERLAY ══ */
 #successOverlay {
   display: none;
@@ -1870,6 +1953,13 @@ textarea.form-input { resize: vertical; }
   .qr-box img { width: min(180px, 100%); max-width: 100%; height: auto; }
   .qr-secret { max-width: 100%; font-size: .64rem; }
 
+  /* ── Splash loading ── */
+  .splash-icon-wrap { width: 56px; height: 56px; }
+  .splash-icon-wrap svg { width: 28px; height: 28px; }
+  .splash-title { font-size: 1.6rem; }
+  .splash-subtitle { font-size: 0.82rem; }
+  .splash-spinner { width: 24px; height: 24px; border-width: 2.5px; }
+
   /* ── Success overlay ── */
   #successOverlay { padding: 1.5rem; }
   .success-gif-wrap { width: 100px; height: 100px; }
@@ -2018,6 +2108,23 @@ textarea.form-input { resize: vertical; }
 </style>
 </head>
 <body>
+
+<!-- ══ LOADING OVERLAY (Splash style — similar a PlacetaID Móvil) ══ -->
+<div id="loadingOverlay">
+  <div class="splash-inner">
+    <div class="splash-icon-wrap" id="splashIconWrap">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <div class="splash-title" id="splashTitle">Placeta<em>ID</em></div>
+    <div class="splash-subtitle" id="splashSubtitle">Verificando cliente…</div>
+    <div class="splash-spinner-wrap">
+      <div class="splash-spinner"></div>
+    </div>
+    <div class="splash-brand" id="splashBrand">Grupo de La Placeta</div>
+  </div>
+</div>
 
 <!-- SUCCESS OVERLAY -->
 <div id="successOverlay">
@@ -2680,19 +2787,78 @@ function platformLabel(value) {
   return map[value] || value || 'Web';
 }
 
+// ── Loading splash helpers ──
+function mostrarSplashConBranding(info = {}) {
+  const overlay = document.getElementById('loadingOverlay');
+  const title = document.getElementById('splashTitle');
+  const subtitle = document.getElementById('splashSubtitle');
+  const brand = document.getElementById('splashBrand');
+  const iconWrap = document.getElementById('splashIconWrap');
+  if (!overlay) return;
+
+  const bgColor = info.bgColor || '';
+  if (bgColor) {
+    overlay.style.background = bgColor;
+  } else {
+    overlay.style.background = '#1c005f';
+  }
+
+  // Ajustar textos según estado
+  if (info.nombre) {
+    subtitle.textContent = `Conectando con ${info.nombre}…`;
+  } else {
+    subtitle.textContent = 'Verificando cliente…';
+  }
+
+  // Mostrar logo del solicitante si existe
+  const logoUrl = info.logo || '';
+  if (logoUrl && iconWrap) {
+    iconWrap.innerHTML = `<img src="${escapeAttr(logoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:50%;">`;
+    iconWrap.style.background = 'rgba(255,255,255,0.12)';
+  } else {
+    iconWrap.innerHTML = `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+    iconWrap.style.background = 'rgba(255,255,255,0.12)';
+  }
+
+  overlay.classList.remove('hidden');
+}
+
+function ocultarSplash() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
 async function cargarContextoSolicitante() {
+  // Mostrar splash loading inmediatamente
+  mostrarSplashConBranding();
+
   renderSolicitanteContext();
-  if (!clientId) return;
+  if (!clientId) {
+    // Sin clientId, splash breve (solo para transición suave)
+    await new Promise(r => setTimeout(r, 600));
+    ocultarSplash();
+    return;
+  }
   try {
     const res = await fetch('/api/solicitante/info', { headers: { 'X-API-Key': clientId } });
     if (!res.ok) throw new Error('cliente_no_autorizado');
     const info = await res.json();
+
+    // Actualizar splash con branding del solicitante
+    mostrarSplashConBranding(info);
     renderSolicitanteContext(info);
+
+    // Mínimo 1.2s de splash para transición suave
+    await new Promise(r => setTimeout(r, 800));
+    ocultarSplash();
   } catch {
     const alertContainer = document.getElementById('solicitanteAlert');
     const trustPill = document.getElementById('requestTrust');
     if (trustPill) trustPill.textContent = 'Cliente pendiente';
     if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>No se ha podido verificar el solicitante.</strong> Continúa solo si reconoces este acceso.</div>';
+    // Mínimo 0.8s de splash
+    await new Promise(r => setTimeout(r, 600));
+    ocultarSplash();
   }
 }
 
@@ -2700,6 +2866,7 @@ setTimeout(() => { void cargarContextoSolicitante(); }, 50);
 
 // Inicializar UI si hay sesión
 if (state.tokenSesion && !redirectUrl) {
+  ocultarSplash();
   setAdminUI(true);
   showView('dashboard');
 }
@@ -3194,6 +3361,9 @@ function resetDynamicBranding() {
   document.documentElement.style.setProperty('--dynamic-text', '#fff');
   document.documentElement.style.setProperty('--dynamic-text-muted', 'rgba(255,255,255,0.5)');
   document.documentElement.style.setProperty('--dynamic-surface', 'rgba(255,255,255,0.07)');
+  // También restaurar splash por defecto
+  const splash = document.getElementById('loadingOverlay');
+  if (splash) splash.style.background = '#1c005f';
 }
 
 // ── MOBILE SIDEBAR TOGGLE ────────────────────────────────────────────────────
