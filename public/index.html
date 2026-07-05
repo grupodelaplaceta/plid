@@ -2862,8 +2862,8 @@ async function cargarContextoSolicitante() {
 
 setTimeout(() => { void cargarContextoSolicitante(); }, 50);
 
-// Inicializar UI si hay sesión
-if (state.tokenSesion && !redirectUrl) {
+// Inicializar UI admin solo si el usuario tiene rol administrador
+if (state.tokenSesion && state.user?.rol === 'administrador' && !redirectUrl) {
   setAdminUI(true);
   showView('dashboard');
 }
