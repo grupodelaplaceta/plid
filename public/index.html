@@ -2829,6 +2829,9 @@ function ocultarSplash() {
 }
 
 async function cargarContextoSolicitante() {
+  // Si ya hay sesión admin activa, no mostrar splash
+  if (state.tokenSesion && !redirectUrl) return;
+
   // Mostrar splash loading inmediatamente
   mostrarSplashConBranding();
 
@@ -2848,7 +2851,7 @@ async function cargarContextoSolicitante() {
     mostrarSplashConBranding(info);
     renderSolicitanteContext(info);
 
-    // Mínimo 1.2s de splash para transición suave
+    // Mínimo tiempo de splash para transición suave
     await new Promise(r => setTimeout(r, 800));
     ocultarSplash();
   } catch {
@@ -2856,7 +2859,7 @@ async function cargarContextoSolicitante() {
     const trustPill = document.getElementById('requestTrust');
     if (trustPill) trustPill.textContent = 'Cliente pendiente';
     if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>No se ha podido verificar el solicitante.</strong> Continúa solo si reconoces este acceso.</div>';
-    // Mínimo 0.8s de splash
+    // Mínimo tiempo de splash
     await new Promise(r => setTimeout(r, 600));
     ocultarSplash();
   }
@@ -2866,7 +2869,6 @@ setTimeout(() => { void cargarContextoSolicitante(); }, 50);
 
 // Inicializar UI si hay sesión
 if (state.tokenSesion && !redirectUrl) {
-  ocultarSplash();
   setAdminUI(true);
   showView('dashboard');
 }
