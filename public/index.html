@@ -1641,6 +1641,11 @@ textarea.form-input { resize: vertical; }
   font-family: var(--font);
 }
 
+/* ── QR box ── */
+.movil-qr-box {
+  animation: fadeUp 0.4s ease;
+}
+
 /* ── Hint box ── */
 .movil-hint-box {
   text-align: center;
@@ -2373,6 +2378,16 @@ textarea.form-input { resize: vertical; }
             <div class="movil-code-box" id="movilCodeBox" style="display:none;">
               <span class="movil-code-label">Código de verificación</span>
               <span class="movil-code-value" id="movilCodigo"></span>
+            </div>
+
+            <!-- ── QR universal ── -->
+            <div class="movil-qr-box" id="movilQrBox" style="display:none;text-align:center;margin:1rem 0;">
+              <div style="background:#fff;border-radius:12px;padding:12px;display:inline-block;box-shadow:0 8px 24px rgba(0,0,0,0.12);">
+                <img id="movilQrImg" alt="QR PlacetaID Móvil" style="width:180px;height:180px;display:block;image-rendering:pixelated;">
+              </div>
+              <p style="font-size:0.72rem;color:var(--dynamic-text-muted);margin-top:0.5rem;">
+                Escanea con tu cámara para abrir la app
+              </p>
             </div>
 
             <div id="movilRequestResult" style="margin-top:0.75rem;"></div>
@@ -3115,6 +3130,7 @@ function selectMethod(method) {
   document.getElementById('movilStep2').style.display = 'none';
   document.getElementById('movilStep3').style.display = 'none';
   document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('movilQrBox').style.display = 'none';
   document.getElementById('btnMovilOpenApp').style.display = 'none';
   document.getElementById('movilPollLoader').style.display = 'none';
   document.getElementById('movilProgressBar').style.width = '33.33%';
@@ -3147,6 +3163,7 @@ function volverAMetodos() {
   document.getElementById('movilStep2').style.display = 'none';
   document.getElementById('movilStep3').style.display = 'none';
   document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('movilQrBox').style.display = 'none';
   document.getElementById('btnMovilOpenApp').style.display = 'none';
   document.getElementById('movilPollLoader').style.display = 'none';
   document.getElementById('movilProgressBar').style.width = '33.33%';
@@ -3229,6 +3246,14 @@ async function movilSolicitar() {
     document.getElementById('movilHintBox').style.display = '';
     document.getElementById('movilRequestResult').innerHTML =
       '<div class="alert alert-success">✅ Solicitud enviada. Revisa tu app PlacetaID Móvil.</div>';
+
+    // Cargar QR universal
+    fetch('/api/mobil/qr').then(r => r.json()).then(qrData => {
+      if (qrData.ok) {
+        document.getElementById('movilQrImg').src = qrData.qr;
+        document.getElementById('movilQrBox').style.display = '';
+      }
+    }).catch(() => {});
 
     btnConfirm.disabled = false;
     btnConfirm.innerHTML = 'Solicitar autorización →';
@@ -3330,6 +3355,7 @@ function resetLogin() {
   document.getElementById('movilStep2').style.display = 'none';
   document.getElementById('movilStep3').style.display = 'none';
   document.getElementById('movilCodeBox').style.display = 'none';
+  document.getElementById('movilQrBox').style.display = 'none';
   document.getElementById('btnMovilOpenApp').style.display = 'none';
   document.getElementById('movilPollLoader').style.display = 'none';
   document.getElementById('movilProgressBar').style.width = '33.33%';

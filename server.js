@@ -1920,6 +1920,22 @@ app.get('/api/mobil/history/:dip', async (req, res) => {
   }
 });
 
+// ── QR universal para PlacetaID Móvil ──────────────────────────────────────
+// Genera un QR con el deep link universal que abre la app directamente
+app.get('/api/mobil/qr', async (req, res) => {
+  try {
+    const deepLink = 'placetaid-mobil://auth';
+    const qrDataUrl = await QRCode.toDataURL(deepLink, {
+      width: 300,
+      margin: 2,
+      color: { dark: '#1c005f', light: '#ffffff' }
+    });
+    res.json({ ok: true, qr: qrDataUrl, link: deepLink });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al generar QR' });
+  }
+});
+
 // ── SERVIR FRONTEND ───────────────────────────────────────────────────────────
 app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'assets', 'faviid.png'));
