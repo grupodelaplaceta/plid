@@ -2698,6 +2698,18 @@ const returnState = urlParams.get('state') || '';
 const codeChallenge = urlParams.get('code_challenge') || '';
 const requestedServiceName = urlParams.get('service') || urlParams.get('servicio') || '';
 
+// Guardar redirectUrl en sessionStorage para que sobreviva a cualquier cambio de estado
+if (redirectUrl) {
+  try { sessionStorage.setItem('placetaid_redirect_url', redirectUrl); } catch (e) {}
+} else {
+  // Intentar recuperar de sessionStorage si se perdió
+  const savedRedirect = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('placetaid_redirect_url') : null;
+  if (savedRedirect) {
+    // Reconstruir redirectUrl desde sessionStorage
+    redirectUrl = savedRedirect;
+  }
+}
+
 const state = {
   tokenFase2: null,
   tokenSesion: null,
@@ -3017,27 +3029,33 @@ function finishLogin(data) {
   state.tokenSesion = data.tokenSesion;
   state.user = data.registro;
 
-  // Usar servicioUrl de la respuesta del servidor, o el redirectUrl de la URL, o fallback
-  const redirectTo = data.servicioUrl || state.redirectUrl;
+  // ── REDIRIGIR SIEMPRE al callback configurado ──────────────────────────
+  // Fuentes: server response > URL params > sessionStorage backup
+  const redirectTo = data.servicioUrl || state.redirectUrl ||
+    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('placetaid_redirect_url') : null);
 
   if (redirectTo) {
-    try {
-      const redirectUri = new URL(redirectTo);
-      redirectUri.searchParams.append('placetaid_token', data.tokenSesion);
-      redirectUri.searchParams.append('token', data.tokenSesion);
-      redirectUri.searchParams.append('user', JSON.stringify(data.registro));
-      redirectUri.searchParams.append('platform', data.plataforma || state.requestedPlatform);
-      redirectUri.searchParams.append('expires_in', String(data.expiresIn || 3600));
-      if (state.returnState || data.state) redirectUri.searchParams.append('state', data.state || state.returnState);
-      console.log('[PlacetaID] Redirigiendo a', redirectUri.toString());
-      window.location.href = redirectUri.toString();
-      return;
-    } catch (e) {
-      console.error('[PlacetaID] Error al redirigir:', redirectTo, e);
-    }
+    const sep = redirectTo.includes('?') ? '&' : '?';
+    const stateParam = (state.returnState || data.state)
+      ? '&state=' + encodeURIComponent(data.state || state.returnState) : '';
+    const destino = redirectTo + sep +
+      'placetaid_token=' + encodeURIComponent(data.tokenSesion) +
+      '&token=' + encodeURIComponent(data.tokenSesion) +
+      '&user=' + encodeURIComponent(JSON.stringify(data.registro)) +
+      '&platform=' + encodeURIComponent(data.plataforma || state.requestedPlatform) +
+      '&expires_in=' + (data.expiresIn || 3600) +
+      stateParam;
+    console.log('[PlacetaID] Redirigiendo a', destino);
+    window.location.href = destino;
+    return;
   }
 
-  // Fallback: mostrar éxito en la misma página
+  // ⚠️ Sin URL de redirect — mostrar error visible en la página
+  const errEl = document.getElementById('movilRequestResult') || document.createElement('div');
+  errEl.innerHTML = '<div class="alert alert-error">❌ Error: no hay URL de redirección configurada. Vuelve a iniciar desde la aplicación origen.</div>';
+  return;
+
+  // Fallback legacy (no se usa, pero se mantiene por compatibilidad)
 
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('step2').classList.remove('active');
