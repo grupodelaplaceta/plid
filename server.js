@@ -1591,6 +1591,30 @@ app.patch('/api/admin/solicitantes/:id/branding', verifyAdminApiKey, requireAdmi
   }
 });
 
+// ── Actualizar solicitante completo (PUT) ────────────────────────────────────
+app.put('/api/admin/solicitantes/:id', verifyAdminApiKey, requireAdmin, async (req, res) => {
+  try {
+    const allowed = ['nombre','descripcion','plataforma','urlOrigen','redirectUris','appScheme','packageName','bundleId','deepLinkHost','pkceRequired','permitirWebFallback','logo','bgColor','activo'];
+    const update = {};
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) update[field] = req.body[field];
+    }
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'Nada que actualizar' });
+
+    // Si se actualiza urlOrigen y no redirectUris, sincronizar
+    if (update.urlOrigen && !req.body.redirectUris) {
+      update.redirectUris = [update.urlOrigen];
+    }
+
+    const solicitante = await Solicitante.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!solicitante) return res.status(404).json({ error: 'Solicitante no encontrado' });
+    invalidateSolicitanteCache(solicitante.apiKey);
+    res.json({ ok: true, solicitante });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Obtener info del solicitante en producción (validar por apiKey)
 app.get('/api/solicitante/info', async (req, res) => {
   const key = req.headers['x-api-key'];
