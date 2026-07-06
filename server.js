@@ -53,6 +53,35 @@ const BUILTIN_SOLICITANTES = [
     activo: true,
     pkceRequired: false,
     permitirWebFallback: true
+  },
+  {
+    nombre: 'GDLP CRM Web',
+    descripcion: 'Portal web del CRM del Grupo de La Placeta.',
+    plataforma: 'web',
+    urlOrigen: 'https://gdlp.laplaceta.org/placetid/callback',
+    redirectUris: [
+      'https://gdlp.laplaceta.org/placetid/callback',
+      'https://www.laplaceta.org/placetid/callback',
+      'http://localhost:3001/placetid/callback'
+    ],
+    apiKey: process.env.PLACETAID_CRM_CLIENT_ID || 'ccb611655030bdadf7218418dc195dcb',
+    activo: true,
+    pkceRequired: false,
+    permitirWebFallback: true
+  },
+  {
+    nombre: 'Banco Web',
+    descripcion: 'Portal web del Banco de La Placeta.',
+    plataforma: 'web',
+    urlOrigen: 'https://banco.laplaceta.org/',
+    redirectUris: [
+      'https://banco.laplaceta.org/',
+      'http://localhost:3000/'
+    ],
+    apiKey: process.env.PLACETAID_BANCO_CLIENT_ID || 'banco-web',
+    activo: true,
+    pkceRequired: false,
+    permitirWebFallback: true
   }
 ];
 
