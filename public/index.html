@@ -2690,13 +2690,24 @@ textarea.form-input { resize: vertical; }
 
 <script>
 // ── ESTADO ────────────────────────────────────────────────────────────────────
+// Parsear URL manualmente (URLSearchParams falla con ciertos formatos de URL)
+function getUrlParam(name) {
+  const raw = window.location.search.replace('?', '').split('&');
+  for (const pair of raw) {
+    const eq = pair.indexOf('=');
+    if (eq === -1) continue;
+    const key = decodeURIComponent(pair.slice(0, eq));
+    if (key === name) return decodeURIComponent(pair.slice(eq + 1));
+  }
+  return null;
+}
 const urlParams = new URLSearchParams(window.location.search);
-let redirectUrl = urlParams.get('redirect_uri') || urlParams.get('from') || null; // Callback autorizado
-const clientId = urlParams.get('client_id') || urlParams.get('api_key') || null;
-const requestedPlatform = urlParams.get('platform') || 'web';
-const returnState = urlParams.get('state') || '';
-const codeChallenge = urlParams.get('code_challenge') || '';
-const requestedServiceName = urlParams.get('service') || urlParams.get('servicio') || '';
+let redirectUrl = getUrlParam('redirect_uri') || getUrlParam('from') || null; // Callback autorizado
+const clientId = getUrlParam('client_id') || getUrlParam('api_key') || null;
+const requestedPlatform = getUrlParam('platform') || 'web';
+const returnState = getUrlParam('state') || '';
+const codeChallenge = getUrlParam('code_challenge') || '';
+const requestedServiceName = getUrlParam('service') || getUrlParam('servicio') || '';
 
 // DEBUG VISIBLE: mostrar en la consola del navegador qué se leyó realmente
 console.log('[PlacetaID] URL:', window.location.href);
