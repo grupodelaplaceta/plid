@@ -3018,15 +3018,22 @@ function finishLogin(data) {
   state.user = data.registro;
 
   if (state.redirectUrl) {
-    const redirectUri = new URL(state.redirectUrl);
-    redirectUri.searchParams.append('placetaid_token', data.tokenSesion);
-    redirectUri.searchParams.append('token', data.tokenSesion);
-    redirectUri.searchParams.append('user', JSON.stringify(data.registro));
-    redirectUri.searchParams.append('platform', data.plataforma || state.requestedPlatform);
-    redirectUri.searchParams.append('expires_in', String(data.expiresIn || 3600));
-    if (state.returnState || data.state) redirectUri.searchParams.append('state', data.state || state.returnState);
-    window.location.href = redirectUri.toString();
-    return;
+    try {
+      const redirectUri = new URL(state.redirectUrl);
+      redirectUri.searchParams.append('placetaid_token', data.tokenSesion);
+      redirectUri.searchParams.append('token', data.tokenSesion);
+      redirectUri.searchParams.append('user', JSON.stringify(data.registro));
+      redirectUri.searchParams.append('platform', data.plataforma || state.requestedPlatform);
+      redirectUri.searchParams.append('expires_in', String(data.expiresIn || 3600));
+      if (state.returnState || data.state) redirectUri.searchParams.append('state', data.state || state.returnState);
+      const destino = redirectUri.toString();
+      console.log('[PlacetaID] Redirigiendo a', destino);
+      window.location.href = destino;
+      return;
+    } catch (e) {
+      console.error('[PlacetaID] Error al redirigir a', state.redirectUrl, e);
+      // Fallback: mostrar éxito en la misma página
+    }
   }
 
   document.getElementById('fase2Panel').style.display = 'none';

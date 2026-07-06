@@ -62,6 +62,7 @@ const BUILTIN_SOLICITANTES = [
     redirectUris: [
       'https://gdlp.laplaceta.org/placetid/callback',
       'https://www.laplaceta.org/placetid/callback',
+      'https://grupodelaplaceta.vercel.app/placetid/callback',
       'http://localhost:3001/placetid/callback'
     ],
     apiKey: process.env.PLACETAID_CRM_CLIENT_ID || 'ccb611655030bdadf7218418dc195dcb',
