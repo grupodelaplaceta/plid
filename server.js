@@ -581,6 +581,7 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
     tokenSesion,
     registro: datosRegistro,
     servicio: payload.servicio,
+    servicioUrl: payload.servicioUrl || null,
     plataforma: payload.platform || 'web',
     state: payload.state || null,
     expiresIn: 5 * 24 * 60 * 60,

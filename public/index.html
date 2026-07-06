@@ -3017,24 +3017,27 @@ function finishLogin(data) {
   state.tokenSesion = data.tokenSesion;
   state.user = data.registro;
 
-  if (state.redirectUrl) {
+  // Usar servicioUrl de la respuesta del servidor, o el redirectUrl de la URL, o fallback
+  const redirectTo = data.servicioUrl || state.redirectUrl;
+
+  if (redirectTo) {
     try {
-      const redirectUri = new URL(state.redirectUrl);
+      const redirectUri = new URL(redirectTo);
       redirectUri.searchParams.append('placetaid_token', data.tokenSesion);
       redirectUri.searchParams.append('token', data.tokenSesion);
       redirectUri.searchParams.append('user', JSON.stringify(data.registro));
       redirectUri.searchParams.append('platform', data.plataforma || state.requestedPlatform);
       redirectUri.searchParams.append('expires_in', String(data.expiresIn || 3600));
       if (state.returnState || data.state) redirectUri.searchParams.append('state', data.state || state.returnState);
-      const destino = redirectUri.toString();
-      console.log('[PlacetaID] Redirigiendo a', destino);
-      window.location.href = destino;
+      console.log('[PlacetaID] Redirigiendo a', redirectUri.toString());
+      window.location.href = redirectUri.toString();
       return;
     } catch (e) {
-      console.error('[PlacetaID] Error al redirigir a', state.redirectUrl, e);
-      // Fallback: mostrar éxito en la misma página
+      console.error('[PlacetaID] Error al redirigir:', redirectTo, e);
     }
   }
+
+  // Fallback: mostrar éxito en la misma página
 
   document.getElementById('fase2Panel').style.display = 'none';
   document.getElementById('step2').classList.remove('active');
