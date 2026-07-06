@@ -941,6 +941,97 @@ app.post('/api/auth/fase2', async (req, res) => {
 });
 
 // ── API: REGISTRO DE NUEVO USUARIO ─────────────────────────────────────────
+
+// ── Generar token de registro para completar desde web pública ───────────
+app.post('/api/registro/generar-token', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || req.headers['x-placetaid-client-key'];
+    if (!apiKey) return res.status(401).json({ error: 'x-api-key requerido' });
+    const solicitante = await Solicitante.findOne({ apiKey, activo: true });
+    if (!solicitante) return res.status(401).json({ error: 'solicitante_no_autorizado' });
+
+    const { dip } = req.body;
+    if (!dip) return res.status(400).json({ error: 'dip requerido' });
+
+    const cleanDip = normalizeDip(dip);
+    const registro = await Registro.findOne({ dip: cleanDip });
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (registro.totpVerified) return res.status(400).json({ error: 'El 2FA ya está configurado' });
+
+    const token = jwt.sign(
+      { tipo: 'completar_registro', dip: cleanDip, registroId: registro._id.toString(), creadoPor: solicitante.nombre },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const otpauthUrl = buildTotpUrl(cleanDip, registro.totpSecret);
+    const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+    await registrarLog({ dip: cleanDip, registroId: registro._id, servicio: solicitante.nombre, evento: 'token_registro_generado', ip: getIP(req), ua: req.headers['user-agent'] });
+
+    res.json({
+      ok: true, token, qrCode, otpauthUrl, totpSecret: registro.totpSecret,
+      dip: cleanDip, placeid: registro.placeid,
+      nombre: `${registro.nombre} ${registro.apellidos || ''}`.trim(),
+      mensaje: 'Token generado. Comparte el enlace con el ciudadano.'
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Error al generar token' }); }
+});
+
+// ── Info del token de registro (para vista pública) ────────────────────────
+app.post('/api/registro/info-token', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token requerido' });
+  try {
+    const apiKey = req.headers['x-api-key'] || req.headers['x-placetaid-client-key'];
+    if (!apiKey) return res.status(401).json({ error: 'x-api-key requerido' });
+    const solicitante = await Solicitante.findOne({ apiKey, activo: true });
+    if (!solicitante) return res.status(401).json({ error: 'solicitante_no_autorizado' });
+
+    let payload;
+    try { payload = jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: 'Token inválido o expirado' }); }
+    if (payload.tipo !== 'completar_registro') return res.status(400).json({ error: 'Token incorrecto' });
+
+    const registro = await Registro.findById(payload.registroId);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (registro.totpVerified) return res.status(400).json({ error: 'El 2FA ya fue configurado' });
+
+    const otpauthUrl = buildTotpUrl(registro.dip, registro.totpSecret);
+    const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+    res.json({
+      ok: true, qrCode, totpSecret: registro.totpSecret,
+      dip: registro.dip, placeid: registro.placeid,
+      nombre: `${registro.nombre} ${registro.apellidos || ''}`.trim()
+    });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Completar registro con token ──────────────────────────────────────────
+app.post('/api/registro/completar-con-token', async (req, res) => {
+  const { token, codigo } = req.body;
+  if (!token || !codigo) return res.status(400).json({ error: 'token y codigo requeridos' });
+  try {
+    let payload;
+    try { payload = jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: 'Token inválido o expirado.' }); }
+    if (payload.tipo !== 'completar_registro') return res.status(400).json({ error: 'Token incorrecto' });
+
+    const registro = await Registro.findById(payload.registroId);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (registro.totpVerified) return res.status(400).json({ error: 'El 2FA ya fue configurado' });
+
+    const ok = speakeasy.totp.verify({ secret: registro.totpSecret, encoding: 'base32', token: codigo.replace(/\s/g, ''), window: 1 });
+    if (!ok) return res.status(400).json({ error: 'Código incorrecto.' });
+
+    registro.totpVerified = true;
+    registro.activo = true;
+    await registro.save();
+    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.creadoPor || 'Público', evento: 'registro_completado_token', ip: getIP(req), ua: req.headers['user-agent'] });
+
+    res.json({ ok: true, mensaje: '✅ Registro completado. Ya puedes iniciar sesión.', dip: registro.dip });
+  } catch (err) { res.status(500).json({ error: 'Error al completar registro' }); }
+});
+
 app.post('/api/registro', async (req, res) => {
   try {
     const result = await createPlacetaIdRegistration(req.body, {
