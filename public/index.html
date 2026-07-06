@@ -2691,23 +2691,28 @@ textarea.form-input { resize: vertical; }
 <script>
 // ── ESTADO ────────────────────────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
-const redirectUrl = urlParams.get('redirect_uri') || urlParams.get('from') || null; // Callback autorizado
+let redirectUrl = urlParams.get('redirect_uri') || urlParams.get('from') || null; // Callback autorizado
 const clientId = urlParams.get('client_id') || urlParams.get('api_key') || null;
 const requestedPlatform = urlParams.get('platform') || 'web';
 const returnState = urlParams.get('state') || '';
 const codeChallenge = urlParams.get('code_challenge') || '';
 const requestedServiceName = urlParams.get('service') || urlParams.get('servicio') || '';
 
+// DEBUG VISIBLE: mostrar en la consola del navegador qué se leyó realmente
+console.log('[PlacetaID] URL:', window.location.href);
+console.log('[PlacetaID] search:', window.location.search);
+console.log('[PlacetaID] redirectUrl from URL:', redirectUrl);
+console.log('[PlacetaID] clientId:', clientId);
+
 // Guardar redirectUrl en sessionStorage para que sobreviva a cualquier cambio de estado
 if (redirectUrl) {
   try { sessionStorage.setItem('placetaid_redirect_url', redirectUrl); } catch (e) {}
 } else {
   // Intentar recuperar de sessionStorage si se perdió
-  const savedRedirect = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('placetaid_redirect_url') : null;
-  if (savedRedirect) {
-    // Reconstruir redirectUrl desde sessionStorage
-    redirectUrl = savedRedirect;
-  }
+  try {
+    const savedRedirect = sessionStorage.getItem('placetaid_redirect_url');
+    if (savedRedirect) redirectUrl = savedRedirect;
+  } catch (e) {}
 }
 
 const state = {
@@ -3050,9 +3055,19 @@ function finishLogin(data) {
     return;
   }
 
-  // ⚠️ Sin URL de redirect — mostrar error visible en la página
+  // ⚠️ Sin URL de redirect — mostrar DEBUG en la página
+  const debugInfo = [
+    'data.servicioUrl: ' + (data.servicioUrl || 'NULL'),
+    'state.redirectUrl: ' + (state.redirectUrl || 'NULL'),
+    'sessionStorage: ' + (typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('placetaid_redirect_url') || 'NULL') : 'NO_SESSIONSTORAGE'),
+    'window.location.href: ' + window.location.href,
+    'window.location.search: ' + (window.location.search || '(vacio)'),
+    'clientId: ' + (state.clientId || 'NULL'),
+    'returnState: ' + (state.returnState || 'NULL'),
+    'requestedPlatform: ' + state.requestedPlatform
+  ].join('<br>');
   const errEl = document.getElementById('movilRequestResult') || document.createElement('div');
-  errEl.innerHTML = '<div class="alert alert-error">❌ Error: no hay URL de redirección configurada. Vuelve a iniciar desde la aplicación origen.</div>';
+  errEl.innerHTML = '<div class="alert alert-error">❌ Error: no hay URL de redirección.<br><small>' + debugInfo + '</small></div>';
   return;
 
   // Fallback legacy (no se usa, pero se mantiene por compatibilidad)
