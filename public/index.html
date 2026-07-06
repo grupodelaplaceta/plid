@@ -2737,7 +2737,8 @@ const state = {
   returnState,
   codeChallenge,
   requestedServiceName,
-  solicitanteInfo: null
+  solicitanteInfo: null,
+  solicitanteRedirectUrl: null // Se rellena al cargar info del solicitante registrado
 };
 
 function callbackLabel(url) {
@@ -2763,6 +2764,15 @@ function renderSolicitanteContext(info = {}) {
     : 'PlacetaID verificará tu DIP y 2FA para abrir una sesión segura.');
   state.solicitanteInfo = info;
   state.requestedServiceName = name;
+
+  // ── Guardar URL de redirect desde el solicitante registrado ──────────
+  // El solicitante tiene urlOrigen y redirectUris registrados en el servidor
+  const regRedirect = info.urlOrigen || (Array.isArray(info.redirectUris) && info.redirectUris[0]) || null;
+  if (regRedirect) {
+    state.solicitanteRedirectUrl = regRedirect;
+    try { sessionStorage.setItem('placetaid_redirect_url', regRedirect); } catch (e) {}
+    console.log('[PlacetaID] Redirect URL desde solicitante registrado:', regRedirect);
+  }
 
   // ── Aplicar branding dinámico (bgColor + logo) ──
   const bgColor = info.bgColor || '';
@@ -3046,8 +3056,8 @@ function finishLogin(data) {
   state.user = data.registro;
 
   // ── REDIRIGIR SIEMPRE al callback configurado ──────────────────────────
-  // Fuentes: server response > URL params > sessionStorage backup
-  const redirectTo = data.servicioUrl || state.redirectUrl ||
+  // Fuentes: server response > URL params > solicitante registrado > sessionStorage backup
+  const redirectTo = data.servicioUrl || state.redirectUrl || state.solicitanteRedirectUrl ||
     (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('placetaid_redirect_url') : null);
 
   if (redirectTo) {

@@ -1518,6 +1518,7 @@ app.get('/api/solicitante/info', async (req, res) => {
       nombre: solicitante.nombre,
       descripcion: solicitante.descripcion,
       plataforma: solicitante.plataforma,
+      urlOrigen: solicitante.urlOrigen || (Array.isArray(solicitante.redirectUris) && solicitante.redirectUris[0]) || null,
       redirectUris: normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris),
       appScheme: solicitante.appScheme,
       packageName: solicitante.packageName,
