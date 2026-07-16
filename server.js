@@ -2431,6 +2431,97 @@ app.post('/api/mobil/notificaciones/leer', async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
+// MULTI-IDENTIDAD — Consultas que aceptan varios DIPs a la vez
+// ═════════════════════════════════════════════════════════════════════════
+
+// ── POST /api/mobil/multi/pending — Autorizaciones pendientes de varios DIPs ─
+app.post('/api/mobil/multi/pending', async (req, res) => {
+  try {
+    const { dips } = req.body;
+    if (!dips || !Array.isArray(dips) || dips.length === 0) return res.status(400).json({ error: 'Array de DIPs requerido' });
+    const resultados = [];
+    for (const dip of dips) {
+      const requests = await AuthRequest.find({ dip, estado: 'pending' }).sort({ creadoEn: -1 }).limit(10).lean();
+      for (const r of requests) {
+        resultados.push({ ...r, identidad: dip });
+      }
+    }
+    res.json(resultados.sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn)));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/multi/votaciones — Votaciones activas para varios DIPs ─
+app.post('/api/mobil/multi/votaciones', async (req, res) => {
+  try {
+    const { dips } = req.body;
+    if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
+    const usuarios = await Registro.find({ dip: { $in: dips }, activo: true }, 'dip fechaNacimiento rol nombre apellidos').lean();
+    const resultados = [];
+    const votaciones = [...memVotaciones.values()].filter(v => v.estado === 'Activa');
+    for (const user of usuarios) {
+      const edad = user.edad !== undefined ? user.edad : (user.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+      const rol = user.rol || 'miembro';
+      for (const v of votaciones) {
+        let aplica = false;
+        switch (v.grupo) {
+          case 'Junta': aplica = ['administrador', 'moderador'].includes(rol); break;
+          case '+18': aplica = edad >= 18; break;
+          case '16-17': aplica = edad >= 16 && edad < 18; break;
+          case 'Junior': aplica = edad < 16; break;
+          case 'Publico_General': aplica = true; break;
+          default: aplica = true;
+        }
+        if (aplica) resultados.push({ ...v, identidad: user.dip, identidadNombre: user.nombre });
+      }
+    }
+    res.json(resultados);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/multi/documentos — Documentos pendientes para varios DIPs ─
+app.post('/api/mobil/multi/documentos', async (req, res) => {
+  try {
+    const { dips } = req.body;
+    if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
+    const docs = [...memDocumentos.values()].filter(d =>
+      d.estado !== 'Oficial' &&
+      d.destinatarios.some(dd => dips.includes(dd.dip) && !dd.firmado && !dd.rechazado)
+    );
+    // Añadir identidad a cada documento basado en qué DIP de la lista es destinatario
+    const resultados = docs.map(d => {
+      const miDest = d.destinatarios.find(dd => dips.includes(dd.dip));
+      return { ...d, identidad: miDest?.dip || '', identidadNombre: miDest?.nombre || '' };
+    });
+    res.json(resultados);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/multi/notificaciones — Notificaciones para varios DIPs ─
+app.post('/api/mobil/multi/notificaciones', async (req, res) => {
+  const { dips } = req.body;
+  if (!dips || !Array.isArray(dips)) return res.json([]);
+  const notifs = memNotificaciones
+    .filter(n => dips.includes(n.dip))
+    .sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn))
+    .slice(0, 100);
+  res.json(notifs);
+});
+
+// ── POST /api/mobil/multi/documentos/:id/contenido — Contenido de documento ─
+// Para previsualizar antes de firmar
+app.post('/api/mobil/multi/documentos/:id/contenido', async (req, res) => {
+  const d = memDocumentos.get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'No encontrado' });
+  // Devolver el contenido del documento (URL del PDF o contenido base64)
+  res.json({
+    id: d.id, titulo: d.titulo, tipo: d.tipo, csv: d.csv,
+    contenido: d.contenido || null,
+    estado: d.estado,
+    destinatarios: d.destinatarios
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
 // ADMIN-PLACETA BRIDGE — Proxy a PlacetaID para documentos/votaciones
 // ═════════════════════════════════════════════════════════════════════════
 
