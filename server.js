@@ -2369,7 +2369,47 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
       d.firmadoEn = new Date().toISOString();
     }
 
+    // Notificar
+    memNotificaciones.push({
+      tipo: 'documento_firmado',
+      dip,
+      titulo: `📝 Has firmado: ${d.titulo}`,
+      cuerpo: `Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`,
+      documentoId: d.id, leido: false, creadoEn: new Date().toISOString()
+    });
+
     res.json({ success: true, estado: d.estado, firmado: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/documentos/:id/rechazar — Rechazar documento desde móvil ─
+app.post('/api/mobil/documentos/:id/rechazar', async (req, res) => {
+  try {
+    const d = memDocumentos.get(req.params.id);
+    if (!d) return res.status(404).json({ error: 'No encontrado' });
+    const { dip, motivo } = req.body;
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+
+    const dest = d.destinatarios.find(dd => dd.dip === dip);
+    if (!dest) return res.status(400).json({ error: 'No tienes documentos pendientes con este ID' });
+    if (dest.firmado) return res.status(400).json({ error: 'Ya has firmado este documento' });
+
+    dest.rechazado = true;
+    dest.fechaRechazo = new Date().toISOString();
+    dest.motivoRechazo = motivo || 'Sin motivo especificado';
+    d.estado = 'Rechazado';
+    d.motivoRechazoGlobal = motivo || 'Rechazado por un firmante';
+
+    // Notificar a admin
+    memNotificaciones.push({
+      tipo: 'documento_rechazado',
+      dip: 'ADMIN',
+      titulo: `❌ Documento rechazado: ${d.titulo}`,
+      cuerpo: `El usuario ${dip} ha rechazado "${d.titulo}". Motivo: ${dest.motivoRechazo}`,
+      documentoId: d.id, leido: false, creadoEn: new Date().toISOString()
+    });
+
+    res.json({ success: true, estado: 'Rechazado', rechazado: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
