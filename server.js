@@ -2132,6 +2132,286 @@ app.use((req, res) => {
 });
 
 // ── INICIAR SERVIDOR ──────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════
+// VOTACIONES API — Integración con Admin-Placeta + PlacetaID Móvil
+// ═════════════════════════════════════════════════════════════════════════
+
+// Almacén en memoria para votaciones y notificaciones
+// (En producción debería usar MongoDB)
+const memVotaciones = new Map();
+const memNotificaciones = [];
+
+// ── Helper: obtener DIPs por grupo electoral ─────────────────────────────
+async function getDIPsPorGrupo(grupo) {
+  const filtro = { activo: true, bloqueado: false };
+  const usuarios = await Registro.find(filtro, 'dip fechaNacimiento rol nombre apellidos').lean();
+
+  return usuarios.filter(u => {
+    const edad = u.edad !== undefined ? u.edad : (u.fechaNacimiento ? Math.floor((Date.now() - new Date(u.fechaNacimiento).getTime()) / 31557600000) : 0);
+    switch (grupo) {
+      case 'Junta': return ['administrador', 'moderador'].includes(u.rol);
+      case '+18': return edad >= 18;
+      case '16-17': return edad >= 16 && edad < 18;
+      case 'Junior': return edad < 16;
+      case 'Publico_General': return true;
+      default: return true;
+    }
+  }).map(u => ({ dip: u.dip, nombre: u.nombre, apellidos: u.apellidos, edad: u.edad || 0 }));
+}
+
+// ── POST /api/admin/votaciones — Recibir votación desde Admin-Placeta ────
+app.post('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
+  try {
+    const { id, titulo, grupo, quorum, aFavor, enContra, abstenciones, estado, resultado, reunionId } = req.body;
+    if (!id || !titulo) return res.status(400).json({ error: 'id y titulo requeridos' });
+    const dipGrupo = await getDIPsPorGrupo(grupo || 'Publico_General');
+    const votacion = {
+      id, titulo, grupo: grupo || 'Publico_General', quorum: quorum || 50,
+      aFavor: aFavor || 0, enContra: enContra || 0, abstenciones: abstenciones || 0,
+      estado: estado || 'Activa', resultado: resultado || null,
+      reunionId: reunionId || null, destinatarios: dipGrupo,
+      creadoEn: new Date().toISOString()
+    };
+    memVotaciones.set(id, votacion);
+
+    // Crear notificaciones para cada destinatario
+    for (const d of dipGrupo) {
+      memNotificaciones.push({
+        tipo: 'votacion',
+        dip: d.dip,
+        titulo: `🗳️ Nueva votación: ${titulo}`,
+        cuerpo: `Se ha abierto una votación para el grupo ${grupo}. Participa desde PlacetaID Móvil.`,
+        votacionId: id,
+        leido: false,
+        creadoEn: new Date().toISOString()
+      });
+    }
+
+    res.json({ success: true, votacion, destinatarios: dipGrupo.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/admin/votaciones — Listar votaciones ────────────────────────
+app.get('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
+  res.json([...memVotaciones.values()]);
+});
+
+// ── GET /api/admin/votaciones/:id — Obtener votación ─────────────────────
+app.get('/api/admin/votaciones/:id', verifyAdminApiKey, async (req, res) => {
+  const v = memVotaciones.get(req.params.id);
+  if (!v) return res.status(404).json({ error: 'No encontrada' });
+  res.json(v);
+});
+
+// ── PUT /api/admin/votaciones/:id/cerrar — Cerrar votación ──────────────
+app.put('/api/admin/votaciones/:id/cerrar', verifyAdminApiKey, async (req, res) => {
+  const v = memVotaciones.get(req.params.id);
+  if (!v) return res.status(404).json({ error: 'No encontrada' });
+  v.estado = 'Cerrada';
+  v.resultado = (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
+  // Notificar resultado
+  for (const d of v.destinatarios || []) {
+    memNotificaciones.push({
+      tipo: 'votacion_resultado',
+      dip: d.dip,
+      titulo: `📊 Resultado votación: ${v.titulo}`,
+      cuerpo: `La votación "${v.titulo}" ha sido cerrada. Resultado: ${v.resultado}`,
+      votacionId: v.id,
+      leido: false,
+      creadoEn: new Date().toISOString()
+    });
+  }
+  res.json({ success: true, votacion: v });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// DOCUMENTOS API — Firma electrónica filtrada por DIP
+// ═════════════════════════════════════════════════════════════════════════
+
+const memDocumentos = new Map();
+
+// ── POST /api/admin/documentos — Recibir documento para firma ────────────
+app.post('/api/admin/documentos', verifyAdminApiKey, async (req, res) => {
+  try {
+    const { id, titulo, tipo, entidad, destinatariosDIP, contenido, csv } = req.body;
+    if (!id || !titulo) return res.status(400).json({ error: 'id y titulo requeridos' });
+
+    // Validar que los DIPs destino existen
+    const dipsValidos = [];
+    if (destinatariosDIP?.length) {
+      for (const dip of destinatariosDIP) {
+        const user = await Registro.findOne({ dip, activo: true }).lean();
+        if (user) dipsValidos.push({ dip: user.dip, nombre: user.nombre, firmado: false, fechaFirma: null });
+      }
+    }
+
+    const doc = {
+      id, titulo, tipo: tipo || 'documento', entidad: entidad || 'administracion',
+      csv: csv || `CSV-${Date.now().toString(36).toUpperCase()}`,
+      estado: 'Pendiente_Firma', destinatarios: dipsValidos,
+      contenido: contenido || null, creadoEn: new Date().toISOString(),
+      firmadoEn: null
+    };
+    memDocumentos.set(id, doc);
+
+    // Notificar a cada destinatario
+    for (const d of dipsValidos) {
+      memNotificaciones.push({
+        tipo: 'documento',
+        dip: d.dip,
+        titulo: `📄 Documento pendiente: ${titulo}`,
+        cuerpo: `Tienes un documento pendiente de firma: ${titulo} (${tipo || 'documento'}). Ábrelo desde PlacetaID Móvil.`,
+        documentoId: id,
+        leido: false,
+        creadoEn: new Date().toISOString()
+      });
+    }
+
+    res.json({ success: true, documento: doc, notificacionesEnviadas: dipsValidos.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/admin/documentos — Listar documentos ────────────────────────
+app.get('/api/admin/documentos', verifyAdminApiKey, async (req, res) => {
+  res.json([...memDocumentos.values()]);
+});
+
+// ── GET /api/admin/documentos/:id — Obtener documento ────────────────────
+app.get('/api/admin/documentos/:id', verifyAdminApiKey, async (req, res) => {
+  const d = memDocumentos.get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'No encontrado' });
+  res.json(d);
+});
+
+// ── POST /api/admin/documentos/:id/firmar — Firmar documento (admin) ────
+app.post('/api/admin/documentos/:id/firmar', verifyAdminApiKey, async (req, res) => {
+  const d = memDocumentos.get(req.params.id);
+  if (!d) return res.status(404).json({ error: 'No encontrado' });
+  const { dip, bypass } = req.body;
+  if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+
+  const dest = d.destinatarios.find(dd => dd.dip === dip);
+  if (!dest && !bypass) return res.status(400).json({ error: 'DIP no está en la lista de destinatarios' });
+
+  if (bypass) {
+    // Marcar todos como firmados
+    d.destinatarios = d.destinatarios.map(dd => ({
+      ...dd, firmado: true, fechaFirma: new Date().toISOString()
+    }));
+  } else {
+    dest.firmado = true;
+    dest.fechaFirma = new Date().toISOString();
+  }
+
+  // Verificar si todos firmaron
+  const todosFirmados = d.destinatarios.every(dd => dd.firmado);
+  if (todosFirmados) {
+    d.estado = 'Oficial';
+    d.firmadoEn = new Date().toISOString();
+  }
+
+  res.json({ success: true, documento: d });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// PLACETAID MÓVIL — Votaciones y Documentos
+// ═════════════════════════════════════════════════════════════════════════
+
+// ── GET /api/mobil/votaciones/:dip — Votaciones activas para un DIP ──────
+app.get('/api/mobil/votaciones/:dip', async (req, res) => {
+  try {
+    const user = await Registro.findOne({ dip: req.params.dip }).lean();
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const edad = user.edad !== undefined ? user.edad : (user.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+    const rol = user.rol || 'miembro';
+
+    const votaciones = [...memVotaciones.values()].filter(v => {
+      if (v.estado !== 'Activa') return false;
+      switch (v.grupo) {
+        case 'Junta': return ['administrador', 'moderador'].includes(rol);
+        case '+18': return edad >= 18;
+        case '16-17': return edad >= 16 && edad < 18;
+        case 'Junior': return edad < 16;
+        case 'Publico_General': return true;
+        default: return true;
+      }
+    });
+    res.json(votaciones);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/documentos/:dip — Documentos pendientes para un DIP ───
+app.get('/api/mobil/documentos/:dip', async (req, res) => {
+  const docs = [...memDocumentos.values()].filter(d =>
+    d.estado !== 'Oficial' && d.destinatarios.some(dd => dd.dip === req.params.dip && !dd.firmado)
+  );
+  res.json(docs);
+});
+
+// ── POST /api/mobil/documentos/:id/firmar — Firmar documento desde móvil ─
+app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
+  try {
+    const d = memDocumentos.get(req.params.id);
+    if (!d) return res.status(404).json({ error: 'No encontrado' });
+    const { dip } = req.body;
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+
+    const dest = d.destinatarios.find(dd => dd.dip === dip);
+    if (!dest) return res.status(400).json({ error: 'No tienes documentos pendientes con este ID' });
+    if (dest.firmado) return res.status(400).json({ error: 'Ya has firmado este documento' });
+
+    dest.firmado = true;
+    dest.fechaFirma = new Date().toISOString();
+
+    const todosFirmados = d.destinatarios.every(dd => dd.firmado);
+    if (todosFirmados) {
+      d.estado = 'Oficial';
+      d.firmadoEn = new Date().toISOString();
+    }
+
+    res.json({ success: true, estado: d.estado, firmado: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/notificaciones/:dip — Notificaciones para un DIP ──────
+app.get('/api/mobil/notificaciones/:dip', async (req, res) => {
+  const notifs = memNotificaciones
+    .filter(n => n.dip === req.params.dip)
+    .sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn))
+    .slice(0, 50);
+  res.json(notifs);
+});
+
+// ── POST /api/mobil/notificaciones/leer — Marcar notificación como leída ─
+app.post('/api/mobil/notificaciones/leer', async (req, res) => {
+  const { notificacionId } = req.body;
+  const n = memNotificaciones.find(n => n._id === notificacionId);
+  if (n) n.leido = true;
+  res.json({ success: true });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// ADMIN-PLACETA BRIDGE — Proxy a PlacetaID para documentos/votaciones
+// ═════════════════════════════════════════════════════════════════════════
+
+// ── GET /api/admin/notificaciones — Todas las notificaciones ─────────────
+app.get('/api/admin/notificaciones', verifyAdminApiKey, async (req, res) => {
+  const { dip, tipo, leido } = req.query;
+  let filtradas = [...memNotificaciones];
+  if (dip) filtradas = filtradas.filter(n => n.dip === dip);
+  if (tipo) filtradas = filtradas.filter(n => n.tipo === tipo);
+  if (leido !== undefined) filtradas = filtradas.filter(n => n.leido === (leido === 'true'));
+  res.json(filtradas.sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn)).slice(0, 100));
+});
+
+// ── GET /api/admin/grupos/:grupo/dips — Listar DIPs por grupo electoral ──
+app.get('/api/admin/grupos/:grupo/dips', verifyAdminApiKey, async (req, res) => {
+  try {
+    const dips = await getDIPsPorGrupo(req.params.grupo);
+    res.json({ grupo: req.params.grupo, total: dips.length, dips });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // En desarrollo local, executar: npm start
 if (require.main === module) {
   // Arrancar servidor inmediatamente, sin esperar a MongoDB
