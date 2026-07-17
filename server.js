@@ -2139,7 +2139,16 @@ app.use((req, res) => {
 // Almacén en memoria para votaciones y notificaciones
 // (En producción debería usar MongoDB)
 const memVotaciones = new Map();
+let memNotifIdCounter = 0;
 const memNotificaciones = [];
+
+function pushNotificacion(data) {
+  memNotificaciones.push({
+    _id: String(++memNotifIdCounter),
+    ...data,
+    creadoEn: data.creadoEn || new Date().toISOString()
+  });
+}
 
 // ── Helper: obtener DIPs por grupo electoral ─────────────────────────────
 async function getDIPsPorGrupo(grupo) {
@@ -2176,14 +2185,13 @@ app.post('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
 
     // Crear notificaciones para cada destinatario
     for (const d of dipGrupo) {
-      memNotificaciones.push({
+      pushNotificacion({
         tipo: 'votacion',
         dip: d.dip,
         titulo: `🗳️ Nueva votación: ${titulo}`,
         cuerpo: `Se ha abierto una votación para el grupo ${grupo}. Participa desde PlacetaID Móvil.`,
         votacionId: id,
-        leido: false,
-        creadoEn: new Date().toISOString()
+        leido: false
       });
     }
 
@@ -2211,14 +2219,13 @@ app.put('/api/admin/votaciones/:id/cerrar', verifyAdminApiKey, async (req, res) 
   v.resultado = (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
   // Notificar resultado
   for (const d of v.destinatarios || []) {
-    memNotificaciones.push({
+    pushNotificacion({
       tipo: 'votacion_resultado',
       dip: d.dip,
       titulo: `📊 Resultado votación: ${v.titulo}`,
       cuerpo: `La votación "${v.titulo}" ha sido cerrada. Resultado: ${v.resultado}`,
       votacionId: v.id,
-      leido: false,
-      creadoEn: new Date().toISOString()
+      leido: false
     });
   }
   res.json({ success: true, votacion: v });
@@ -2256,14 +2263,13 @@ app.post('/api/admin/documentos', verifyAdminApiKey, async (req, res) => {
 
     // Notificar a cada destinatario
     for (const d of dipsValidos) {
-      memNotificaciones.push({
+      pushNotificacion({
         tipo: 'documento',
         dip: d.dip,
         titulo: `📄 Documento pendiente: ${titulo}`,
         cuerpo: `Tienes un documento pendiente de firma: ${titulo} (${tipo || 'documento'}). Ábrelo desde PlacetaID Móvil.`,
         documentoId: id,
-        leido: false,
-        creadoEn: new Date().toISOString()
+        leido: false
       });
     }
 
@@ -2370,12 +2376,12 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
     }
 
     // Notificar
-    memNotificaciones.push({
+    pushNotificacion({
       tipo: 'documento_firmado',
       dip,
       titulo: `📝 Has firmado: ${d.titulo}`,
       cuerpo: `Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`,
-      documentoId: d.id, leido: false, creadoEn: new Date().toISOString()
+      documentoId: d.id, leido: false
     });
 
     res.json({ success: true, estado: d.estado, firmado: true });
@@ -2401,12 +2407,12 @@ app.post('/api/mobil/documentos/:id/rechazar', async (req, res) => {
     d.motivoRechazoGlobal = motivo || 'Rechazado por un firmante';
 
     // Notificar a admin
-    memNotificaciones.push({
+    pushNotificacion({
       tipo: 'documento_rechazado',
       dip: 'ADMIN',
       titulo: `❌ Documento rechazado: ${d.titulo}`,
       cuerpo: `El usuario ${dip} ha rechazado "${d.titulo}". Motivo: ${dest.motivoRechazo}`,
-      documentoId: d.id, leido: false, creadoEn: new Date().toISOString()
+      documentoId: d.id, leido: false
     });
 
     res.json({ success: true, estado: 'Rechazado', rechazado: true });
