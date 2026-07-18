@@ -2531,59 +2531,52 @@ app.post('/api/mobil/multi/votaciones', async (req, res) => {
 // ── POST /api/mobil/multi/documentos — Documentos pendientes para varios DIPs ─
 app.post('/api/mobil/multi/documentos', async (req, res) => {
   try {
-    const { dips } = req.body;
-    if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
+    const { dips, todos } = req.body;
     
-    // 1. Documentos en memoria (enviados por admin-placeta vía POST /api/admin/documentos)
+    // 1. Documentos en memoria
     const docs = [...memDocumentos.values()];
     const idsEnMemoria = new Set(docs.map(d => d.id || d._id));
 
-    // 2. Siempre traer documentos desde admin-placeta (por si hay nuevos o hubo reinicio)
+    // 2. Siempre sincronizar desde admin-placeta
     try {
       const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
       const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
       const r = await fetch(`${ADMIN_API}/publico/banco/documentos?api_key=${API_KEY}`);
       if (r.ok) {
-        const body = await r.json();
-        const adminDocs = body.documentos || [];
-        for (const ad of adminDocs) {
-          if (idsEnMemoria.has(ad.id)) continue; // ya está en memoria
+        for (const ad of (await r.json()).documentos || []) {
+          if (idsEnMemoria.has(ad.id)) continue;
           const dipDoc = ad.datos?.dip || '';
-          const esSistema = ad.createdBy === 'sistema' || !dipDoc;
-          if (esSistema) continue; // saltar docs del sistema sin DIP
-          // Buscar nombre del usuario
+          if (!dipDoc || ad.createdBy === 'sistema') continue;
           let nombre = '';
-          try {
-            const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean();
-            if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim();
-          } catch {}
+          try { const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean(); if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim(); } catch {}
           const doc = {
-            _id: ad.id, id: ad.id,
-            titulo: ad.titulo || 'Documento',
-            tipo: ad.tipo || 'documento',
-            entidad: 'banco',
+            _id: ad.id, id: ad.id, titulo: ad.titulo || 'Documento',
+            tipo: ad.tipo || 'documento', entidad: 'banco',
             csv: ad.hash || `CSV-${(ad.id||'').slice(0,8).toUpperCase()}`,
             estado: ad.estado === 'firmado' ? 'Oficial' : 'Pendiente_Firma',
             destinatarios: [{ dip: dipDoc, nombre: nombre || dipDoc, firmado: ad.estado === 'firmado', fechaFirma: ad.datos?.fechaFirma || null }],
-            contenido: null,
-            creadoEn: ad.createdAt || new Date().toISOString(),
-            firmadoEn: ad.datos?.fechaFirma || null
+            contenido: null, creadoEn: ad.createdAt || new Date().toISOString(), firmadoEn: ad.datos?.fechaFirma || null
           };
           memDocumentos.set(ad.id, doc);
           docs.push(doc);
         }
       }
-    } catch (e) {
-      console.error('[Docs] Error fetching from admin-placeta:', e.message);
+    } catch (e) { console.error('[Docs] Error fetching from admin-placeta:', e.message); }
+    
+    // 3. Filtrar: si `todos` es true o dips vacío, devolver todo
+    let filtrados;
+    if (todos === true || !dips || !Array.isArray(dips) || dips.length === 0) {
+      filtrados = docs.filter(d => d.estado !== 'Oficial');
+    } else {
+      filtrados = docs.filter(d =>
+        d.estado !== 'Oficial' &&
+        d.destinatarios?.some(dd => dips.includes(dd.dip) && !dd.firmado && !dd.rechazado)
+      );
     }
     
-    const filtrados = docs.filter(d =>
-      d.estado !== 'Oficial' &&
-      d.destinatarios?.some(dd => dips.includes(dd.dip) && !dd.firmado && !dd.rechazado)
-    );
     const resultados = filtrados.map(d => {
-      const miDest = d.destinatarios?.find(dd => dips.includes(dd.dip));
-      return { ...d, identidad: miDest?.dip || '', identidadNombre: miDest?.nombre || '' };
+      const miDest = d.destinatarios?.[0] || {};
+      return { ...d, identidad: miDest.dip || '', identidadNombre: miDest.nombre || '' };
     });
     res.json(resultados);
   } catch (e) { res.status(500).json({ error: e.message }); }
