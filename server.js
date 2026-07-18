@@ -2539,46 +2539,47 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
     const { dips } = req.body;
     if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
     
-    // Solo memoria (ya no se persiste en MongoDB)
-    let docs = [...memDocumentos.values()];
+    // 1. Documentos en memoria (enviados por admin-placeta vía POST /api/admin/documentos)
+    const docs = [...memDocumentos.values()];
+    const idsEnMemoria = new Set(docs.map(d => d.id || d._id));
 
-    // Si la memoria está vacía (ej: reinicio), intentar resync desde admin-placeta
-    if (docs.length === 0) {
-      try {
-        const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
-        const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
-        const r = await fetch(`${ADMIN_API}/api/publico/banco/documentos`, {
-          headers: { 'x-api-key': API_KEY }
-        });
-        if (r.ok) {
-          const body = await r.json();
-          const adminDocs = body.documentos || [];
-          for (const ad of adminDocs) {
-            const dipDoc = ad.datos?.dip || ad.createdBy || '';
-            if (!dipDoc) continue;
-            // Buscar nombre del usuario
-            let nombre = '';
-            try {
-              const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean();
-              if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim();
-            } catch {}
-            const doc = {
-              _id: ad.id, id: ad.id,
-              titulo: ad.titulo || 'Documento',
-              tipo: ad.tipo || 'documento',
-              entidad: 'banco',
-              csv: ad.hash || `CSV-${ad.id.slice(0,8).toUpperCase()}`,
-              estado: ad.estado === 'firmado' ? 'Oficial' : 'Pendiente_Firma',
-              destinatarios: [{ dip: dipDoc, nombre: nombre || dipDoc, firmado: ad.estado === 'firmado', fechaFirma: ad.datos?.fechaFirma || null }],
-              contenido: null,
-              creadoEn: ad.createdAt || new Date().toISOString(),
-              firmadoEn: ad.datos?.fechaFirma || null
-            };
-            memDocumentos.set(ad.id, doc);
-          }
-          docs = [...memDocumentos.values()];
+    // 2. Siempre traer documentos desde admin-placeta (por si hay nuevos o hubo reinicio)
+    try {
+      const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
+      const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
+      const r = await fetch(`${ADMIN_API}/publico/banco/documentos?api_key=${API_KEY}`);
+      if (r.ok) {
+        const body = await r.json();
+        const adminDocs = body.documentos || [];
+        for (const ad of adminDocs) {
+          if (idsEnMemoria.has(ad.id)) continue; // ya está en memoria
+          const dipDoc = ad.datos?.dip || '';
+          const esSistema = ad.createdBy === 'sistema' || !dipDoc;
+          if (esSistema) continue; // saltar docs del sistema sin DIP
+          // Buscar nombre del usuario
+          let nombre = '';
+          try {
+            const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean();
+            if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim();
+          } catch {}
+          const doc = {
+            _id: ad.id, id: ad.id,
+            titulo: ad.titulo || 'Documento',
+            tipo: ad.tipo || 'documento',
+            entidad: 'banco',
+            csv: ad.hash || `CSV-${(ad.id||'').slice(0,8).toUpperCase()}`,
+            estado: ad.estado === 'firmado' ? 'Oficial' : 'Pendiente_Firma',
+            destinatarios: [{ dip: dipDoc, nombre: nombre || dipDoc, firmado: ad.estado === 'firmado', fechaFirma: ad.datos?.fechaFirma || null }],
+            contenido: null,
+            creadoEn: ad.createdAt || new Date().toISOString(),
+            firmadoEn: ad.datos?.fechaFirma || null
+          };
+          memDocumentos.set(ad.id, doc);
+          docs.push(doc);
         }
-      } catch {}
+      }
+    } catch (e) {
+      console.error('[Docs] Error fetching from admin-placeta:', e.message);
     }
     
     const filtrados = docs.filter(d =>
