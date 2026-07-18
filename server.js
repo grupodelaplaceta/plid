@@ -2589,6 +2589,37 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/mobil/multi/documentos/todos — Todos los docs (historial) ─
+app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
+  try {
+    const { dips } = req.body;
+    if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
+    let docs = [...memDocumentos.values()];
+    if (docs.length < 10) {
+      try {
+        const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
+        const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
+        const r = await fetch(`${ADMIN_API}/publico/banco/documentos?api_key=${API_KEY}`);
+        if (r.ok) {
+          for (const ad of (await r.json()).documentos || []) {
+            if (memDocumentos.has(ad.id)) continue;
+            const dipDoc = ad.datos?.dip || '';
+            if (!dipDoc || ad.createdBy === 'sistema') continue;
+            let nombre = '';
+            try { const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean(); if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim(); } catch {}
+            memDocumentos.set(ad.id, { _id:ad.id, id:ad.id, titulo:ad.titulo||'Documento', tipo:ad.tipo||'documento', entidad:'banco', csv:ad.hash||`CSV-${(ad.id||'').slice(0,8).toUpperCase()}`, estado:ad.estado==='firmado'?'Oficial':'Pendiente_Firma', destinatarios:[{dip:dipDoc, nombre:nombre||dipDoc, firmado:ad.estado==='firmado', fechaFirma:ad.datos?.fechaFirma||null}], contenido:null, creadoEn:ad.createdAt||new Date().toISOString(), firmadoEn:ad.datos?.fechaFirma||null });
+            docs.push(memDocumentos.get(ad.id));
+          }
+        }
+      } catch {}
+    }
+    const filtrados = docs.filter(d => d.destinatarios?.some(dd => dips.includes(dd.dip)));
+    const resultados = filtrados.map(d => { const m = d.destinatarios?.find(dd => dips.includes(dd.dip)); return {...d, identidad:m?.dip||'', identidadNombre:m?.nombre||''}; });
+    resultados.sort((a,b) => new Date(b.creadoEn||0)-new Date(a.creadoEn||0));
+    res.json(resultados);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POST /api/mobil/multi/notificaciones — Notificaciones para varios DIPs ─
 app.post('/api/mobil/multi/notificaciones', async (req, res) => {
   const { dips } = req.body;
