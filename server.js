@@ -28,7 +28,7 @@ function initFirebase() {
     console.log('  ⚠️  Firebase Admin not available:', e.message);
   }
 }
-const { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest, Documento } = require('./models');
+const { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest } = require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -2307,8 +2307,7 @@ app.post('/api/admin/documentos', verifyAdminApiKey, async (req, res) => {
       firmadoEn: null
     };
 
-    // Guardar en MongoDB + memoria
-    try { await new Documento(doc).save(); } catch (e) { /* ya existe */ }
+    // Guardar en memoria
     memDocumentos.set(id, doc);
 
     // Notificar a cada destinatario
@@ -2407,10 +2406,8 @@ app.get('/api/mobil/documentos/:dip', async (req, res) => {
 // ── POST /api/mobil/documentos/:id/firmar — Firmar documento desde móvil ─
 app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
   try {
-    const d = memDocumentos.get(req.params.id) || await Documento.findById(req.params.id).lean();
+    const d = memDocumentos.get(req.params.id);
     if (!d) return res.status(404).json({ error: 'No encontrado' });
-    if (!memDocumentos.has(req.params.id)) memDocumentos.set(req.params.id, d);
-    
     const { dip } = req.body;
     if (!dip) return res.status(400).json({ error: 'DIP requerido' });
 
@@ -2427,16 +2424,13 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
       d.firmadoEn = new Date().toISOString();
     }
 
-    // Persistir en MongoDB
-    try { await Documento.findByIdAndUpdate(d._id || d.id, { $set: { destinatarios: d.destinatarios, estado: d.estado, firmadoEn: d.firmadoEn } }); } catch {}
-
     // Notificar
     pushNotificacion({
       tipo: 'documento_firmado',
       dip,
       titulo: `📝 Has firmado: ${d.titulo}`,
       cuerpo: `Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`,
-      documentoId: d.id || d._id, leido: false
+      documentoId: d.id, leido: false
     });
 
     res.json({ success: true, estado: d.estado, firmado: true });
@@ -2446,10 +2440,8 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
 // ── POST /api/mobil/documentos/:id/rechazar — Rechazar documento desde móvil ─
 app.post('/api/mobil/documentos/:id/rechazar', async (req, res) => {
   try {
-    const d = memDocumentos.get(req.params.id) || await Documento.findById(req.params.id).lean();
+    const d = memDocumentos.get(req.params.id);
     if (!d) return res.status(404).json({ error: 'No encontrado' });
-    if (!memDocumentos.has(req.params.id)) memDocumentos.set(req.params.id, d);
-    
     const { dip, motivo } = req.body;
     if (!dip) return res.status(400).json({ error: 'DIP requerido' });
 
@@ -2463,16 +2455,13 @@ app.post('/api/mobil/documentos/:id/rechazar', async (req, res) => {
     d.estado = 'Rechazado';
     d.motivoRechazoGlobal = motivo || 'Rechazado por un firmante';
 
-    // Persistir en MongoDB
-    try { await Documento.findByIdAndUpdate(d._id || d.id, { $set: { destinatarios: d.destinatarios, estado: d.estado } }); } catch {}
-
     // Notificar a admin
     pushNotificacion({
       tipo: 'documento_rechazado',
       dip: 'ADMIN',
       titulo: `❌ Documento rechazado: ${d.titulo}`,
       cuerpo: `El usuario ${dip} ha rechazado "${d.titulo}". Motivo: ${dest.motivoRechazo}`,
-      documentoId: d.id || d._id, leido: false
+      documentoId: d.id, leido: false
     });
 
     res.json({ success: true, estado: 'Rechazado', rechazado: true });
@@ -2550,15 +2539,8 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
     const { dips } = req.body;
     if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
     
-    // Cargar desde MongoDB + memoria
+    // Solo memoria (ya no se persiste en MongoDB)
     const docs = [...memDocumentos.values()];
-    if (docs.length === 0) {
-      try {
-        const mongoDocs = await Documento.find({ estado: { $ne: 'Oficial' } }).lean();
-        mongoDocs.forEach(d => memDocumentos.set(d._id || d.id, d));
-        docs.push(...mongoDocs.map(d => ({ ...d, id: d._id || d.id })));
-      } catch {}
-    }
     
     const filtrados = docs.filter(d =>
       d.estado !== 'Oficial' &&
