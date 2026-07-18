@@ -2585,7 +2585,7 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
 // ── POST /api/mobil/multi/documentos/todos — Todos los docs (historial) ─
 app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
   try {
-    const { dips } = req.body;
+    const { dips, todos } = req.body;
     if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
     let docs = [...memDocumentos.values()];
     if (docs.length < 10) {
@@ -2606,8 +2606,10 @@ app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
         }
       } catch {}
     }
-    const filtrados = docs.filter(d => d.destinatarios?.some(dd => dips.includes(dd.dip)));
-    const resultados = filtrados.map(d => { const m = d.destinatarios?.find(dd => dips.includes(dd.dip)); return {...d, identidad:m?.dip||'', identidadNombre:m?.nombre||''}; });
+    const filtrados = (todos || !dips || !Array.isArray(dips) || dips.length === 0)
+      ? docs
+      : docs.filter(d => d.destinatarios?.some(dd => dips.includes(dd.dip)));
+    const resultados = filtrados.map(d => { const m = d.destinatarios?.[0] || {}; return {...d, identidad:m.dip||'', identidadNombre:m.nombre||''}; });
     resultados.sort((a,b) => new Date(b.creadoEn||0)-new Date(a.creadoEn||0));
     res.json(resultados);
   } catch (e) { res.status(500).json({ error: e.message }); }
