@@ -2540,7 +2540,46 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
     if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
     
     // Solo memoria (ya no se persiste en MongoDB)
-    const docs = [...memDocumentos.values()];
+    let docs = [...memDocumentos.values()];
+
+    // Si la memoria está vacía (ej: reinicio), intentar resync desde admin-placeta
+    if (docs.length === 0) {
+      try {
+        const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
+        const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
+        const r = await fetch(`${ADMIN_API}/api/publico/banco/documentos`, {
+          headers: { 'x-api-key': API_KEY }
+        });
+        if (r.ok) {
+          const body = await r.json();
+          const adminDocs = body.documentos || [];
+          for (const ad of adminDocs) {
+            const dipDoc = ad.datos?.dip || ad.createdBy || '';
+            if (!dipDoc) continue;
+            // Buscar nombre del usuario
+            let nombre = '';
+            try {
+              const u = await Registro.findOne({ dip: dipDoc }, 'nombre apellidos').lean();
+              if (u) nombre = `${u.nombre} ${u.apellidos || ''}`.trim();
+            } catch {}
+            const doc = {
+              _id: ad.id, id: ad.id,
+              titulo: ad.titulo || 'Documento',
+              tipo: ad.tipo || 'documento',
+              entidad: 'banco',
+              csv: ad.hash || `CSV-${ad.id.slice(0,8).toUpperCase()}`,
+              estado: ad.estado === 'firmado' ? 'Oficial' : 'Pendiente_Firma',
+              destinatarios: [{ dip: dipDoc, nombre: nombre || dipDoc, firmado: ad.estado === 'firmado', fechaFirma: ad.datos?.fechaFirma || null }],
+              contenido: null,
+              creadoEn: ad.createdAt || new Date().toISOString(),
+              firmadoEn: ad.datos?.fechaFirma || null
+            };
+            memDocumentos.set(ad.id, doc);
+          }
+          docs = [...memDocumentos.values()];
+        }
+      } catch {}
+    }
     
     const filtrados = docs.filter(d =>
       d.estado !== 'Oficial' &&
