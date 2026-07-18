@@ -2145,11 +2145,6 @@ app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'assets', 'faviid.png'));
 });
 
-// Catch-all for SPA
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 // ── INICIAR SERVIDOR ──────────────────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════════════════
 // VOTACIONES API — Integración con Admin-Placeta + PlacetaID Móvil
@@ -2639,6 +2634,11 @@ app.get('/api/admin/grupos/:grupo/dips', verifyAdminApiKey, async (req, res) => 
     const dips = await getDIPsPorGrupo(req.params.grupo);
     res.json({ grupo: req.params.grupo, total: dips.length, dips });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Catch-all for SPA (DEBE ir al final, después de todas las rutas)
+app.use((req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // En desarrollo local, executar: npm start
