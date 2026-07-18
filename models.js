@@ -290,6 +290,29 @@ authRequestSchema.index({ codigo: 1 });
 authRequestSchema.index({ dip: 1, estado: 1 });
 authRequestSchema.index({ expiraEn: 1 }, { expireAfterSeconds: 0 }); // TTL: borrar expirados
 
+// ── DOCUMENTO (firma electrónica) ────────────────────────────────────────────
+const documentoSchema = new mongoose.Schema({
+  _id: { type: String }, // Usamos el ID del documento como _id
+  titulo: { type: String, required: true },
+  tipo: { type: String, default: 'documento' },
+  entidad: { type: String, default: 'administracion' },
+  csv: { type: String },
+  estado: { type: String, default: 'Pendiente_Firma', index: true },
+  destinatarios: [{
+    dip: { type: String, required: true },
+    nombre: { type: String },
+    firmado: { type: Boolean, default: false },
+    rechazado: { type: Boolean, default: false },
+    fechaFirma: { type: Date, default: null },
+    firmaBase64: { type: String }
+  }],
+  contenido: { type: mongoose.Schema.Types.Mixed },
+  creadoEn: { type: Date, default: Date.now },
+  firmadoEn: { type: Date }
+}, { _id: false });
+
+const Documento = mongoose.model('Documento', documentoSchema);
+
 const Registro = mongoose.model('Registro', registroSchema);
 const Log = mongoose.model('Log', logSchema);
 const Solicitante = mongoose.model('Solicitante', solicitanteSchema);
@@ -297,4 +320,4 @@ const MigracionPendiente = mongoose.model('MigracionPendiente', migracionPendien
 const MobileDevice = mongoose.model('MobileDevice', mobileDeviceSchema);
 const AuthRequest = mongoose.model('AuthRequest', authRequestSchema);
 
-module.exports = { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest };
+module.exports = { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest, Documento };
