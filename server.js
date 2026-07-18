@@ -2283,17 +2283,14 @@ const memDocumentos = new Map();
 async function syncFirmaAAdmin(doc, dip, firmaBase64) {
   try {
     const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
-    const getR = await fetch(`${ADMIN_API}/publico/banco/documentos?api_key=docs-shared-key-2026`);
-    if (!getR.ok) return;
-    const body = await getR.json();
-    const adminDoc = body.documentos?.find(d => d.id === doc.id);
-    if (!adminDoc) return;
-    await fetch(`${ADMIN_API}/api/banco/documentos/${doc.id}`, {
+    const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
+    const entidad = doc.entidad || 'banco';
+    await fetch(`${ADMIN_API}/publico/${entidad}/documentos/${doc.id}/firmar?api_key=${API_KEY}`, {
       method: 'PUT',
-      headers: { 'Content-Type':'application/json', 'X-API-Key': process.env.PLACETAID_CLIENT_ID || 'ccb611655030bdadf7218418dc195dcb' },
+      headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({
         estado: 'firmado', firmado: true,
-        datos: { ...(adminDoc.datos||{}), firmadoPor: dip, fechaFirma: new Date().toISOString(), ...(firmaBase64?{firma_base64:firmaBase64,firmaImagen:firmaBase64}:{}) }
+        datos: { firmadoPor: dip, fechaFirma: new Date().toISOString(), ...(firmaBase64?{firma_base64:firmaBase64,firmaImagen:firmaBase64}:{}) }
       }),
       signal: AbortSignal.timeout(5000)
     });
