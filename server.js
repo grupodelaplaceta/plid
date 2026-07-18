@@ -2405,30 +2405,38 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
     if (!d) return res.status(404).json({ error: 'No encontrado' });
     const { dip } = req.body;
     if (!dip) return res.status(400).json({ error: 'DIP requerido' });
-
     const dest = d.destinatarios.find(dd => dd.dip === dip);
     if (!dest) return res.status(400).json({ error: 'No tienes documentos pendientes con este ID' });
     if (dest.firmado) return res.status(400).json({ error: 'Ya has firmado este documento' });
-
     dest.firmado = true;
     dest.fechaFirma = new Date().toISOString();
-
+    // Guardar firma manuscrita si se envió
+    if (req.body.firma_base64) dest.firmaBase64 = req.body.firma_base64;
     const todosFirmados = d.destinatarios.every(dd => dd.firmado);
-    if (todosFirmados) {
-      d.estado = 'Oficial';
-      d.firmadoEn = new Date().toISOString();
-    }
+    if (todosFirmados) { d.estado = 'Oficial'; d.firmadoEn = new Date().toISOString(); }
+    pushNotificacion({ tipo:'documento_firmado', dip, titulo:`📝 Has firmado: ${d.titulo}`, cuerpo:`Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`, documentoId:d.id, leido:false });
+    res.json({ success:true, estado:d.estado, firmado:true, firmaRecibida:!!req.body.firma_base64 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-    // Notificar
-    pushNotificacion({
-      tipo: 'documento_firmado',
-      dip,
-      titulo: `📝 Has firmado: ${d.titulo}`,
-      cuerpo: `Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`,
-      documentoId: d.id, leido: false
-    });
-
-    res.json({ success: true, estado: d.estado, firmado: true });
+// ── POST /api/mobil/documentos/:id/firmar-con-firma — Firmar con firma manuscrita ─
+app.post('/api/mobil/documentos/:id/firmar-con-firma', async (req, res) => {
+  try {
+    const d = memDocumentos.get(req.params.id);
+    if (!d) return res.status(404).json({ error: 'No encontrado' });
+    const { dip, firma_base64 } = req.body;
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+    if (!firma_base64) return res.status(400).json({ error: 'firma_base64 requerida' });
+    const dest = d.destinatarios.find(dd => dd.dip === dip);
+    if (!dest) return res.status(400).json({ error: 'No tienes documentos pendientes con este ID' });
+    if (dest.firmado) return res.status(400).json({ error: 'Ya has firmado este documento' });
+    dest.firmado = true;
+    dest.fechaFirma = new Date().toISOString();
+    dest.firmaBase64 = firma_base64;
+    const todosFirmados = d.destinatarios.every(dd => dd.firmado);
+    if (todosFirmados) { d.estado = 'Oficial'; d.firmadoEn = new Date().toISOString(); }
+    pushNotificacion({ tipo:'documento_firmado', dip, titulo:`📝 Has firmado: ${d.titulo}`, cuerpo:`Has firmado electrónicamente el documento "${d.titulo}" con firma manuscrita. Estado: ${d.estado}`, documentoId:d.id, leido:false });
+    res.json({ success:true, estado:d.estado, firmado:true, firmaRecibida:true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
