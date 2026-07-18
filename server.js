@@ -9,6 +9,25 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const path = require('path');
 const crypto = require('crypto');
+let firebaseAdmin = null;
+let firebaseInitAttempted = false;
+function initFirebase() {
+  if (firebaseInitAttempted) return;
+  firebaseInitAttempted = true;
+  try {
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './firebase-service-account.json';
+    if (require('fs').existsSync(serviceAccountPath)) {
+      firebaseAdmin = require('firebase-admin');
+      const serviceAccount = require(serviceAccountPath);
+      firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.cert(serviceAccount) });
+      console.log('  ✅ Firebase Admin SDK initialized');
+    } else {
+      console.log('  ⚠️  Firebase: no service account file at', serviceAccountPath);
+    }
+  } catch (e) {
+    console.log('  ⚠️  Firebase Admin not available:', e.message);
+  }
+}
 const { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthRequest } = require('./models');
 
 const app = express();
@@ -2143,11 +2162,39 @@ let memNotifIdCounter = 0;
 const memNotificaciones = [];
 
 function pushNotificacion(data) {
-  memNotificaciones.push({
+  const notif = {
     _id: String(++memNotifIdCounter),
     ...data,
     creadoEn: data.creadoEn || new Date().toISOString()
-  });
+  };
+  memNotificaciones.push(notif);
+
+  // Enviar push real via FCM si está disponible
+  if (firebaseAdmin && data.dip) {
+    setImmediate(async () => {
+      try {
+        const devices = await MobileDevice.find({ dip: data.dip, activo: true }).lean();
+        if (devices.length > 0) {
+          const tokens = devices.map(d => d.deviceToken).filter(Boolean);
+          if (tokens.length > 0) {
+            const message = {
+              tokens,
+              data: {
+                type: data.tipo || 'general',
+                title: data.titulo || '',
+                body: data.cuerpo || '',
+                id: String(notif._id),
+                documentoId: data.documentoId || ''
+              }
+            };
+            await firebaseAdmin.messaging().sendEachForMulticast(message);
+          }
+        }
+      } catch (e) {
+        console.warn('[FCM] Error sending push:', e.message);
+      }
+    });
+  }
 }
 
 // ── Helper: obtener DIPs por grupo electoral ─────────────────────────────
@@ -2551,6 +2598,8 @@ app.get('/api/admin/grupos/:grupo/dips', verifyAdminApiKey, async (req, res) => 
 
 // En desarrollo local, executar: npm start
 if (require.main === module) {
+  // Inicializar Firebase (si hay credenciales)
+  initFirebase();
   // Arrancar servidor inmediatamente, sin esperar a MongoDB
   app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
