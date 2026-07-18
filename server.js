@@ -2279,6 +2279,27 @@ app.put('/api/admin/votaciones/:id/cerrar', verifyAdminApiKey, async (req, res) 
 
 const memDocumentos = new Map();
 
+// ── Helper: sincronizar firma a admin-placeta ──────────────────────────
+async function syncFirmaAAdmin(doc, dip, firmaBase64) {
+  try {
+    const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
+    const getR = await fetch(`${ADMIN_API}/publico/banco/documentos?api_key=docs-shared-key-2026`);
+    if (!getR.ok) return;
+    const body = await getR.json();
+    const adminDoc = body.documentos?.find(d => d.id === doc.id);
+    if (!adminDoc) return;
+    await fetch(`${ADMIN_API}/api/banco/documentos/${doc.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type':'application/json', 'X-API-Key': process.env.PLACETAID_CLIENT_ID || 'ccb611655030bdadf7218418dc195dcb' },
+      body: JSON.stringify({
+        estado: 'firmado', firmado: true,
+        datos: { ...(adminDoc.datos||{}), firmadoPor: dip, fechaFirma: new Date().toISOString(), ...(firmaBase64?{firma_base64:firmaBase64,firmaImagen:firmaBase64}:{}) }
+      }),
+      signal: AbortSignal.timeout(5000)
+    });
+  } catch (e) { console.error('[Sync] Error syncing to admin-placeta:', e.message); }
+}
+
 // ── POST /api/admin/documentos — Recibir documento para firma ────────────
 app.post('/api/admin/documentos', verifyAdminApiKey, async (req, res) => {
   try {
@@ -2415,6 +2436,8 @@ app.post('/api/mobil/documentos/:id/firmar', async (req, res) => {
     const todosFirmados = d.destinatarios.every(dd => dd.firmado);
     if (todosFirmados) { d.estado = 'Oficial'; d.firmadoEn = new Date().toISOString(); }
     pushNotificacion({ tipo:'documento_firmado', dip, titulo:`📝 Has firmado: ${d.titulo}`, cuerpo:`Has firmado electrónicamente el documento "${d.titulo}". Estado actual: ${d.estado}`, documentoId:d.id, leido:false });
+    // Sincronizar firma a admin-placeta
+    syncFirmaAAdmin(d, dip, req.body.firma_base64);
     res.json({ success:true, estado:d.estado, firmado:true, firmaRecibida:!!req.body.firma_base64 });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2436,6 +2459,7 @@ app.post('/api/mobil/documentos/:id/firmar-con-firma', async (req, res) => {
     const todosFirmados = d.destinatarios.every(dd => dd.firmado);
     if (todosFirmados) { d.estado = 'Oficial'; d.firmadoEn = new Date().toISOString(); }
     pushNotificacion({ tipo:'documento_firmado', dip, titulo:`📝 Has firmado: ${d.titulo}`, cuerpo:`Has firmado electrónicamente el documento "${d.titulo}" con firma manuscrita. Estado: ${d.estado}`, documentoId:d.id, leido:false });
+    syncFirmaAAdmin(d, dip, firma_base64);
     res.json({ success:true, estado:d.estado, firmado:true, firmaRecibida:true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2594,7 +2618,6 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
 app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
   try {
     const { dips, todos } = req.body;
-    if (!dips || !Array.isArray(dips)) return res.status(400).json({ error: 'Array de DIPs requerido' });
     let docs = [...memDocumentos.values()];
     if (docs.length < 10) {
       try {
