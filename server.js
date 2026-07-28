@@ -2525,8 +2525,6 @@ app.get('/api/mobil/votaciones/:dip', async (req, res) => {
 // ── GET /api/mobil/votaciones/pendientes/:dip — Votaciones pendientes (no votadas) ─
 app.get('/api/mobil/votaciones/pendientes/:dip', async (req, res) => {
   try {
-    // Registrar consulta RSP (no bloqueante)
-    rspRegistrarPlaceta('votaciones', 'consulta', `GET /mobil/votaciones/pendientes/${req.params.dip}`);
     const user = await Registro.findOne({ dip: req.params.dip }).lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     const edad = user.edad !== undefined ? user.edad : (user.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
@@ -2716,7 +2714,6 @@ app.post('/api/mobil/votaciones/:id/ejercer', async (req, res) => {
 
 // ── GET /api/mobil/votaciones/historial/:dip — Historial de votos ────────
 app.get('/api/mobil/votaciones/historial/:dip', async (req, res) => {
-  rspRegistrarPlaceta('votaciones', 'consulta', `GET /mobil/votaciones/historial/${req.params.dip}`);
   try {
     const todasVotaciones = [...memVotaciones.values()];
     const historial = todasVotaciones.map(v => {
