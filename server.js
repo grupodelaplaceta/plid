@@ -469,9 +469,13 @@ async function backfillSupportNumbers() {
       if (batch.length === 0) break;
 
       for (const user of batch) {
-        user.supportNumber = await generateUniqueSupportNumber();
+        try {
+          user.supportNumber = await generateUniqueSupportNumber();
+          await user.save();
+        } catch (err) {
+          console.warn(`   ⚠️ Error backfilling ${user.dip || user._id}: ${err.message?.slice(0, 80)}`);
+        }
       }
-      await Promise.all(batch.map(user => user.save()));
 
       processed += batch.length;
       console.log(`   Backfilled ${processed}/${pendientes} usuarios`);
