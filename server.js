@@ -2210,18 +2210,65 @@ async function getDIPsPorGrupo(grupo) {
   }).map(u => ({ dip: u.dip, nombre: u.nombre, apellidos: u.apellidos, edad: u.edad || 0 }));
 }
 
+// ── Inicializar votaciones de ejemplo ─────────────────────────────────
+(function initVotacionesEjemplo() {
+  if (memVotaciones.size > 0) return;
+  const ahora = new Date();
+  const manana = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
+  const semana = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const ejemplos = [
+    {
+      id: 'VOT-003', titulo: 'Nuevo Cargo Directivo — Dir. Comunicación',
+      descripcion: 'Elección del nuevo Director/a de Comunicación del Grupo de La Placeta',
+      categoria: 'junta', grupo: 'Junta', quorum: 50,
+      aFavor: 0, enContra: 0, abstenciones: 0, totalVotos: 0, totalEmitidos: 0,
+      estado: 'Activa', resultado: null, reunionId: null,
+      fechaCreacion: ahora.toISOString(), fechaLimite: semana.toISOString(),
+      requiereQuorum: true, destinatarios: [],
+      creadoEn: ahora.toISOString().slice(0, 10)
+    },
+    {
+      id: 'VOT-004', titulo: '¿Debe la Placeta organizar un evento anual?',
+      descripcion: 'Consulta ciudadana sobre la organización de un evento anual abierto a todos los ciudadanos',
+      categoria: 'ciudadanos', grupo: 'Publico_General', quorum: 30,
+      aFavor: 0, enContra: 0, abstenciones: 0, totalVotos: 0, totalEmitidos: 0,
+      estado: 'Activa', resultado: null, reunionId: 'REU-003',
+      fechaCreacion: ahora.toISOString(), fechaLimite: manana.toISOString(),
+      requiereQuorum: false, destinatarios: [],
+      creadoEn: ahora.toISOString().slice(0, 10)
+    }
+  ];
+  ejemplos.forEach(e => memVotaciones.set(e.id, e));
+  console.log(`  ✅ ${ejemplos.length} votaciones de ejemplo inicializadas`);
+})();
+
 // ── POST /api/admin/votaciones — Recibir votación desde Admin-Placeta ────
 app.post('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
   try {
-    const { id, titulo, grupo, quorum, aFavor, enContra, abstenciones, estado, resultado, reunionId } = req.body;
+    const { id, titulo, grupo, quorum, aFavor, enContra, abstenciones, estado, resultado, reunionId, fechaLimite, categoria, descripcion, requiereQuorum } = req.body;
     if (!id || !titulo) return res.status(400).json({ error: 'id y titulo requeridos' });
     const dipGrupo = await getDIPsPorGrupo(grupo || 'Publico_General');
+
+    // Calcular fecha límite por defecto (7 días)
+    let fechaLim = fechaLimite;
+    if (!fechaLim) {
+      const def = new Date();
+      def.setDate(def.getDate() + 7);
+      fechaLim = def.toISOString();
+    }
+
     const votacion = {
-      id, titulo, grupo: grupo || 'Publico_General', quorum: quorum || 50,
+      id, titulo, descripcion: descripcion || '',
+      categoria: categoria || grupo || 'General', grupo: grupo || 'Publico_General',
+      quorum: quorum || 50,
       aFavor: aFavor || 0, enContra: enContra || 0, abstenciones: abstenciones || 0,
+      totalVotos: (aFavor || 0) + (enContra || 0) + (abstenciones || 0),
+      totalEmitidos: 0,
       estado: estado || 'Activa', resultado: resultado || null,
-      reunionId: reunionId || null, destinatarios: dipGrupo,
-      creadoEn: new Date().toISOString()
+      reunionId: reunionId || null, requiereQuorum: requiereQuorum !== undefined ? requiereQuorum : true,
+      fechaCreacion: new Date().toISOString(), fechaLimite: fechaLim,
+      destinatarios: dipGrupo, creadoEn: new Date().toISOString().slice(0, 10)
     };
     memVotaciones.set(id, votacion);
 
@@ -2385,6 +2432,39 @@ app.post('/api/admin/documentos/:id/firmar', verifyAdminApiKey, async (req, res)
 // PLACETAID MÓVIL — Votaciones y Documentos
 // ═════════════════════════════════════════════════════════════════════════
 
+// ── Registro oficial de votos (para tracking anti-fraude) ──────────────
+const memRegistroVotos = new Map();
+let regVotoCounter = 0;
+
+function generarHashVoto(votacionId, dip, voto, timestamp) {
+  const payload = `${votacionId}:${dip}:${voto}:${timestamp}:placetaid-vote-secret-2026`;
+  return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+function calcularTiempoRestante(fechaLimite) {
+  if (!fechaLimite) return null;
+  const ahora = new Date();
+  const limite = new Date(fechaLimite);
+  const diff = limite.getTime() - ahora.getTime();
+  if (diff <= 0) return { expirada: true, dias: 0, horas: 0, minutos: 0, total: 0 };
+  return {
+    expirada: false,
+    dias: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    horas: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+    minutos: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    total: diff
+  };
+}
+
+function debeSerAnonimo(votacion) {
+  if (!votacion.fechaLimite) return false;
+  if (votacion.categoria === 'junta') return false;
+  const limite = new Date(votacion.fechaLimite);
+  const ahora = new Date();
+  const diff = ahora.getTime() - limite.getTime();
+  return diff > 30 * 24 * 60 * 60 * 1000;
+}
+
 // ── GET /api/mobil/votaciones/:dip — Votaciones activas para un DIP ──────
 app.get('/api/mobil/votaciones/:dip', async (req, res) => {
   try {
@@ -2403,8 +2483,293 @@ app.get('/api/mobil/votaciones/:dip', async (req, res) => {
         case 'Publico_General': return true;
         default: return true;
       }
-    });
+    }).map(v => ({
+      ...v,
+      tiempoRestante: calcularTiempoRestante(v.fechaLimite),
+      esAnonimo: debeSerAnonimo(v)
+    }));
     res.json(votaciones);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/votaciones/pendientes/:dip — Votaciones pendientes (no votadas) ─
+app.get('/api/mobil/votaciones/pendientes/:dip', async (req, res) => {
+  try {
+    const user = await Registro.findOne({ dip: req.params.dip }).lean();
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const edad = user.edad !== undefined ? user.edad : (user.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+    const rol = user.rol || 'miembro';
+
+    const yaVotadas = new Set(
+      [...memRegistroVotos.values()]
+        .filter(r => r.dip === req.params.dip)
+        .map(r => r.votacionId)
+    );
+
+    const pendientes = [...memVotaciones.values()]
+      .filter(v => v.estado === 'Activa' && !yaVotadas.has(v.id))
+      .filter(v => {
+        switch (v.grupo) {
+          case 'Junta': return ['administrador', 'moderador'].includes(rol);
+          case '+18': return edad >= 18;
+          case '16-17': return edad >= 16 && edad < 18;
+          case 'Junior': return edad < 16;
+          case 'Publico_General': return true;
+          default: return true;
+        }
+      })
+      .map(v => ({
+        ...v,
+        tiempoRestante: calcularTiempoRestante(v.fechaLimite),
+        esAnonimo: debeSerAnonimo(v),
+        yaVoto: false
+      }));
+
+    res.json(pendientes);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/votaciones/activas — Todas las votaciones activas ──────
+app.get('/api/mobil/votaciones/activas', async (req, res) => {
+  const activas = [...memVotaciones.values()]
+    .filter(v => v.estado === 'Activa')
+    .map(v => ({ ...v, tiempoRestante: calcularTiempoRestante(v.fechaLimite) }));
+  res.json(activas);
+});
+
+// ── GET /api/mobil/votaciones/:id — Detalle de una votación ──────────────
+app.get('/api/mobil/votaciones/detalle/:id', async (req, res) => {
+  const v = memVotaciones.get(req.params.id);
+  if (!v) return res.status(404).json({ error: 'No encontrada' });
+  const esAnonimo = debeSerAnonimo(v);
+  const votos = [...memRegistroVotos.values()].filter(r => r.votacionId === v.id);
+  res.json({
+    ...v,
+    tiempoRestante: calcularTiempoRestante(v.fechaLimite),
+    esAnonimo,
+    votos: esAnonimo ? votos.map(r => ({
+      id: r.id, hash: r.hash, oficial: r.oficial, timestamp: r.timestamp,
+      dip: r.categoria === 'junta' ? r.dip : '***',
+      nombre: r.categoria === 'junta' ? r.nombre : 'Voto anónimo',
+      voto: r.voto
+    })) : votos
+  });
+});
+
+// ── POST /api/mobil/votaciones/ejercer — Emitir voto (body con votacionId) ─
+app.post('/api/mobil/votaciones/ejercer', async (req, res) => {
+  try {
+    const { dip, nombre, voto, votacionId } = req.body;
+    const idVotacion = votacionId;
+    const v = memVotaciones.get(idVotacion);
+
+    if (!v) return res.status(404).json({ error: 'Votación no encontrada' });
+    if (v.estado !== 'Activa') return res.status(400).json({ error: 'Esta votación ya está cerrada' });
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+    if (!voto || !['a_favor', 'en_contra', 'abstencion'].includes(voto)) {
+      return res.status(400).json({ error: 'Voto inválido. Usar: a_favor, en_contra, abstencion' });
+    }
+
+    // Verificar fecha límite
+    if (v.fechaLimite) {
+      const tiempo = calcularTiempoRestante(v.fechaLimite);
+      if (tiempo && tiempo.expirada) {
+        v.estado = 'Cerrada';
+        v.resultado = (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
+        return res.status(400).json({ error: 'Votación expirada', estado: 'Cerrada' });
+      }
+    }
+
+    // Verificar categoría
+    const user = await Registro.findOne({ dip }).lean();
+    const edad = user?.edad !== undefined ? user.edad : (user?.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+    const rol = user?.rol || 'miembro';
+    let puedeVotar = true;
+    switch (v.grupo) {
+      case 'Junta': puedeVotar = ['administrador', 'moderador'].includes(rol); break;
+      case '+18': puedeVotar = edad >= 18; break;
+      case '16-17': puedeVotar = edad >= 16 && edad < 18; break;
+      case 'Junior': puedeVotar = edad < 16; break;
+      default: puedeVotar = true;
+    }
+    if (!puedeVotar) return res.status(403).json({ error: `No tienes derecho a voto en esta categoría` });
+
+    // Verificar voto duplicado
+    const yaVoto = [...memRegistroVotos.values()].some(r => r.votacionId === idVotacion && r.dip === dip);
+    if (yaVoto) return res.status(409).json({ error: 'Ya has ejercido tu voto en esta votación' });
+
+    // Registrar voto
+    const regId = 'REG-' + String(++regVotoCounter).padStart(5, '0');
+    const timestamp = new Date().toISOString();
+    const hash = generarHashVoto(idVotacion, dip, voto, timestamp);
+
+    const registro = {
+      id: regId, votacionId: idVotacion, dip, nombre: nombre || dip,
+      categoria: v.categoria || v.grupo || 'General', voto, timestamp, hash, oficial: true
+    };
+    memRegistroVotos.set(regId, registro);
+
+    // Actualizar conteo
+    if (voto === 'a_favor') v.aFavor = (v.aFavor || 0) + 1;
+    else if (voto === 'en_contra') v.enContra = (v.enContra || 0) + 1;
+    else if (voto === 'abstencion') v.abstenciones = (v.abstenciones || 0) + 1;
+    v.totalVotos = (v.aFavor || 0) + (v.enContra || 0) + (v.abstenciones || 0);
+    v.totalEmitidos = [...memRegistroVotos.values()].filter(r => r.votacionId === idVotacion).length;
+
+    res.json({
+      success: true,
+      message: 'Voto registrado oficialmente',
+      registro: { id: regId, hash, timestamp, oficial: true },
+      votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos }
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/votaciones/:id/ejercer — Emitir voto (path con ID) ──
+app.post('/api/mobil/votaciones/:id/ejercer', async (req, res) => {
+  // Reuse the ejercer logic by forwarding to the body-based handler
+  req.body = { ...req.body, votacionId: req.params.id };
+  // Forward to existing handler by calling the route logic directly
+  const { dip, nombre, voto, votacionId } = req.body;
+  const idVotacion = votacionId;
+  try {
+    if (!idVotacion) return res.status(400).json({ error: 'ID de votación requerido' });
+    const v = memVotaciones.get(idVotacion);
+    if (!v) return res.status(404).json({ error: 'Votación no encontrada' });
+    if (v.estado !== 'Activa') return res.status(400).json({ error: 'Esta votación ya está cerrada' });
+    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+    if (!voto || !['a_favor', 'en_contra', 'abstencion'].includes(voto)) {
+      return res.status(400).json({ error: 'Voto inválido. Usar: a_favor, en_contra, abstencion' });
+    }
+    if (v.fechaLimite) {
+      const tiempo = calcularTiempoRestante(v.fechaLimite);
+      if (tiempo && tiempo.expirada) {
+        v.estado = 'Cerrada';
+        v.resultado = (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
+        return res.status(400).json({ error: 'Votación expirada', estado: 'Cerrada' });
+      }
+    }
+    const user = await Registro.findOne({ dip }).lean();
+    const edad = user?.edad !== undefined ? user.edad : (user?.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+    const rol = user?.rol || 'miembro';
+    let puedeVotar = true;
+    switch (v.grupo) {
+      case 'Junta': puedeVotar = ['administrador', 'moderador'].includes(rol); break;
+      case '+18': puedeVotar = edad >= 18; break;
+      case '16-17': puedeVotar = edad >= 16 && edad < 18; break;
+      case 'Junior': puedeVotar = edad < 16; break;
+      default: puedeVotar = true;
+    }
+    if (!puedeVotar) return res.status(403).json({ error: 'No tienes derecho a voto en esta categoría' });
+    const yaVoto = [...memRegistroVotos.values()].some(r => r.votacionId === idVotacion && r.dip === dip);
+    if (yaVoto) return res.status(409).json({ error: 'Ya has ejercido tu voto en esta votación' });
+    const regId = 'REG-' + String(++regVotoCounter).padStart(5, '0');
+    const timestamp = new Date().toISOString();
+    const hash = generarHashVoto(idVotacion, dip, voto, timestamp);
+    const registro = { id: regId, votacionId: idVotacion, dip, nombre: nombre || dip, categoria: v.categoria || v.grupo || 'General', voto, timestamp, hash, oficial: true };
+    memRegistroVotos.set(regId, registro);
+    if (voto === 'a_favor') v.aFavor = (v.aFavor || 0) + 1;
+    else if (voto === 'en_contra') v.enContra = (v.enContra || 0) + 1;
+    else if (voto === 'abstencion') v.abstenciones = (v.abstenciones || 0) + 1;
+    v.totalVotos = (v.aFavor || 0) + (v.enContra || 0) + (v.abstenciones || 0);
+    v.totalEmitidos = [...memRegistroVotos.values()].filter(r => r.votacionId === idVotacion).length;
+    res.json({ success: true, message: 'Voto registrado oficialmente', registro: { id: regId, hash, timestamp, oficial: true }, votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/votaciones/historial/:dip — Historial de votos ────────
+app.get('/api/mobil/votaciones/historial/:dip', async (req, res) => {
+  try {
+    const todasVotaciones = [...memVotaciones.values()];
+    const historial = todasVotaciones.map(v => {
+      const esAnonimo = debeSerAnonimo(v);
+      const misVotos = [...memRegistroVotos.values()].filter(r => r.votacionId === v.id);
+      const miVoto = misVotos.find(r => r.dip === req.params.dip);
+      return {
+        id: v.id, titulo: v.titulo, descripcion: v.descripcion,
+        categoria: v.categoria || v.grupo, grupo: v.grupo,
+        estado: v.estado, resultado: v.resultado,
+        fechaCreacion: v.creadoEn || v.fechaCreacion, fechaLimite: v.fechaLimite,
+        reunionId: v.reunionId, aFavor: v.aFavor, enContra: v.enContra,
+        abstenciones: v.abstenciones, totalVotos: v.totalVotos, totalEmitidos: v.totalEmitidos,
+        miVoto: miVoto ? { voto: miVoto.voto, timestamp: miVoto.timestamp, hash: miVoto.hash, oficial: miVoto.oficial } : null,
+        esAnonimo,
+        votos: esAnonimo ? [] : misVotos.map(r => ({
+          dip: r.categoria === 'junta' ? r.dip : '***',
+          nombre: r.categoria === 'junta' ? r.nombre : '***',
+          voto: r.voto, hash: r.hash
+        }))
+      };
+    }).sort((a, b) => (b.fechaCreacion || '').localeCompare(a.fechaCreacion || ''));
+    res.json(historial);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/mobil/votaciones/verificar/:votacionId/:dip — Verificar voto ─
+app.get('/api/mobil/votaciones/verificar/:votacionId/:dip', async (req, res) => {
+  const registro = [...memRegistroVotos.values()]
+    .find(r => r.votacionId === req.params.votacionId && r.dip === req.params.dip);
+  if (!registro) return res.status(404).json({ error: 'Voto no encontrado' });
+  const hashVerificado = generarHashVoto(registro.votacionId, registro.dip, registro.voto, registro.timestamp);
+  const integro = hashVerificado === registro.hash;
+  res.json({
+    verificado: integro, oficial: registro.oficial,
+    timestamp: registro.timestamp, hash: registro.hash,
+    hashRecalculado: hashVerificado, voto: registro.voto, integro
+  });
+});
+
+// ── POST /api/mobil/multi/votaciones/activas — Multi-identidad votos activos ─
+app.post('/api/mobil/multi/votaciones/activas', async (req, res) => {
+  const { dips } = req.body;
+  if (!dips || !Array.isArray(dips)) return res.json([]);
+  try {
+    const usuarios = await Registro.find({ dip: { $in: dips } }).lean();
+    const resultado = [];
+    for (const user of usuarios) {
+      const edad = user.edad !== undefined ? user.edad : (user.fechaNacimiento ? Math.floor((Date.now() - new Date(user.fechaNacimiento).getTime()) / 31557600000) : 0);
+      const rol = user.rol || 'miembro';
+      const yaVotadas = new Set([...memRegistroVotos.values()].filter(r => r.dip === user.dip).map(r => r.votacionId));
+      const pendientes = [...memVotaciones.values()]
+        .filter(v => v.estado === 'Activa' && !yaVotadas.has(v.id))
+        .filter(v => {
+          switch (v.grupo) {
+            case 'Junta': return ['administrador', 'moderador'].includes(rol);
+            case '+18': return edad >= 18;
+            default: return true;
+          }
+        })
+        .map(v => ({
+          ...v, identidad: user.dip, identidadNombre: `${user.nombre || ''} ${user.apellidos || ''}`.trim(),
+          tiempoRestante: calcularTiempoRestante(v.fechaLimite)
+        }));
+      resultado.push(...pendientes);
+    }
+    res.json(resultado);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/mobil/multi/votaciones/historial — Multi-identidad historial ─
+app.post('/api/mobil/multi/votaciones/historial', async (req, res) => {
+  const { dips } = req.body;
+  if (!dips || !Array.isArray(dips)) return res.json([]);
+  try {
+    const todasVotaciones = [...memVotaciones.values()];
+    const resultado = [];
+    for (const dip of dips) {
+      for (const v of todasVotaciones) {
+        const miVoto = [...memRegistroVotos.values()].find(r => r.votacionId === v.id && r.dip === dip);
+        if (miVoto) {
+          resultado.push({
+            id: v.id, titulo: v.titulo, identidad: dip,
+            grupo: v.grupo, estado: v.estado, resultado: v.resultado,
+            aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones,
+            miVoto: { voto: miVoto.voto, timestamp: miVoto.timestamp, hash: miVoto.hash }
+          });
+        }
+      }
+    }
+    res.json(resultado);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
