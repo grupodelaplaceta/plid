@@ -476,6 +476,10 @@ async function backfillSupportNumbers() {
           console.warn(`   ⚠️ Error backfilling ${user.dip || user._id}: ${err.message?.slice(0, 80)}`);
         }
       }
+        } catch (err) {
+          console.warn(`   ⚠️ Error backfilling ${user.dip || user._id}: ${err.message?.slice(0, 80)}`);
+        }
+      }
 
       processed += batch.length;
       console.log(`   Backfilled ${processed}/${pendientes} usuarios`);
