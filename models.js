@@ -234,8 +234,7 @@ const mobileDeviceSchema = new mongoose.Schema({
   },
   deviceId: {
     type: String,
-    required: true,
-    unique: true,
+    required: false,
     trim: true
   },
   deviceName: {

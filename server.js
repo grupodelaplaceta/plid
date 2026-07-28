@@ -1882,7 +1882,10 @@ app.post('/api/mobil/register', async (req, res) => {
     }
 
     // Check if deviceId already exists (update it)
-    const existing = await MobileDevice.findOne({ deviceId: devId });
+    // Check if deviceId or existing device for this DIP+tipo exists
+    const existing = await MobileDevice.findOne({
+      $or: [{ deviceId: devId }, { dip: cleanDip, tipo }]
+    });
     if (existing) {
       existing.dip = cleanDip;
       existing.deviceName = deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
@@ -1932,15 +1935,24 @@ app.post('/api/mobil/unregister', async (req, res) => {
 
     let deleted;
     if (deviceId) {
-      deleted = await MobileDevice.findOneAndDelete({ deviceId });
-    } else {
+      // Buscar por deviceId o _id (para compatibilidad con docs antiguos)
+      deleted = await MobileDevice.findOneAndDelete({
+        $or: [{ deviceId }, { _id: deviceId.match(/^[0-9a-f]{24}$/i) ? deviceId : undefined }]
+      });
+      // Si no se encontró, intentar por _id directamente
+      if (!deleted && deviceId.match(/^[0-9a-f]{24}$/i)) {
+        deleted = await MobileDevice.findByIdAndDelete(deviceId);
+      }
+    }
+    if (!deleted && dip) {
       deleted = await MobileDevice.findOneAndDelete({ dip: normalizeDip(dip) });
     }
     if (!deleted) return res.status(404).json({ error: 'No hay dispositivo registrado' });
 
-    console.log(`💻 Dispositivo desvinculado: ${deleted.deviceName} (${deleted.dip})`);
+    console.log(`💻 Dispositivo desvinculado: ${deleted.deviceName || 'unknown'} (${deleted.dip})`);
     res.json({ ok: true, mensaje: 'Dispositivo desvinculado' });
   } catch (err) {
+    console.error('Error unregister:', err);
     res.status(500).json({ error: 'Error al desvincular dispositivo' });
   }
 });
