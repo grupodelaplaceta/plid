@@ -1843,10 +1843,12 @@ app.post('/api/setup/seed-admin', async (req, res) => {
 // ── API: PLACETAID MÓVIL ─────────────────────────────────────────────────────
 
 // Registrar dispositivo móvil asociado a un PlacetaID
+// Registrar dispositivo (móvil o PC)
 app.post('/api/mobil/register', async (req, res) => {
   try {
-    const { dip, password, deviceToken, deviceName } = req.body;
-    if (!dip || !password || !deviceToken) return res.status(400).json({ error: 'DIP, contraseña y deviceToken requeridos' });
+    const { dip, password, deviceId, deviceToken, deviceName, platform } = req.body;
+    if (!dip || !password || !(deviceId || deviceToken)) return res.status(400).json({ error: 'DIP, contraseña y deviceId requeridos' });
+    const devId = deviceId || deviceToken;
 
     const cleanDip = normalizeDip(dip);
     const registro = await Registro.findOne({ dip: cleanDip });
@@ -1858,58 +1860,66 @@ app.post('/api/mobil/register', async (req, res) => {
     if (!passwordValid) {
       await registrarLog({
         dip: cleanDip, registroId: registro._id,
-        servicio: 'PlacetaID Móvil', evento: 'error_credenciales',
-        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
+        servicio: 'PlacetaID', evento: 'error_credenciales',
+        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
         metadatos: { accion: 'registro_dispositivo', resultado: 'password_incorrecta' }
       });
       return res.status(401).json({ error: 'Contraseña incorrecta' });
     }
 
-    // Check if deviceToken is already registered to another DIP
-    const existingToken = await MobileDevice.findOne({ deviceToken, dip: { $ne: cleanDip } });
-    if (existingToken) {
-      await MobileDevice.deleteOne({ _id: existingToken._id });
+    const tipo = platform === 'pc' || platform === 'windows' || platform === 'mac' || platform === 'linux' ? 'pc' : 'movil';
+
+    // Limitar a 3 PCs o 1 móvil por DIP
+    const dispositivos = await MobileDevice.find({ dip: cleanDip, activo: true });
+    const pcCount = dispositivos.filter(d => d.tipo === 'pc').length;
+    const movilCount = dispositivos.filter(d => d.tipo === 'movil').length;
+
+    if (tipo === 'pc' && pcCount >= 3) {
+      return res.status(409).json({ error: 'Límite de 3 PCs alcanzado. Desvincula uno primero.' });
+    }
+    if (tipo === 'movil' && movilCount >= 1) {
+      return res.status(409).json({ error: 'Ya tienes un móvil vinculado. Desvincula el anterior primero.' });
     }
 
-    // Check if this DIP already has a device registered
-    const existingDevice = await MobileDevice.findOne({ dip: cleanDip });
-    if (existingDevice) {
-      existingDevice.deviceToken = deviceToken;
-      existingDevice.deviceName = deviceName || 'Dispositivo móvil';
-      existingDevice.activo = true;
-      existingDevice.ultimoAcceso = new Date();
-      await existingDevice.save();
+    // Check if deviceId already exists (update it)
+    const existing = await MobileDevice.findOne({ deviceId: devId });
+    if (existing) {
+      existing.dip = cleanDip;
+      existing.deviceName = deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
+      existing.platform = platform || (tipo === 'pc' ? 'windows' : 'android');
+      existing.tipo = tipo;
+      existing.activo = true;
+      existing.ultimoAcceso = new Date();
+      await existing.save();
       await registrarLog({
         dip: cleanDip, registroId: registro._id,
-        servicio: 'PlacetaID Móvil', evento: 'intento_exitoso',
-        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
-        metadatos: { accion: 'registro_dispositivo', resultado: 'actualizado' }
+        servicio: 'PlacetaID', evento: 'intento_exitoso',
+        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
+        metadatos: { accion: 'registro_dispositivo', resultado: 'actualizado', tipo }
       });
-      return res.json({ ok: true, mensaje: 'Dispositivo actualizado' });
+      return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado` });
     }
 
     await MobileDevice.create({
       dip: cleanDip,
-      deviceToken,
-      deviceName: deviceName || 'Dispositivo móvil',
-      platform: 'android',
+      deviceId: devId,
+      deviceName: deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil'),
+      platform: platform || (tipo === 'pc' ? 'windows' : 'android'),
+      tipo,
       activo: true
     });
 
     await registrarLog({
       dip: cleanDip, registroId: registro._id,
-      servicio: 'PlacetaID Móvil', evento: 'intento_exitoso',
-      ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_móvil',
-      metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo' }
+      servicio: 'PlacetaID', evento: 'intento_exitoso',
+      ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
+      metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo', tipo }
     });
 
-    console.log(`📱 Dispositivo registrado para ${cleanDip}`);
-    res.json({ ok: true, mensaje: 'Dispositivo registrado correctamente' });
+    console.log(`💻 ${tipo === 'pc' ? 'PC' : 'Móvil'} registrado para ${cleanDip}`);
+    res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} registrado correctamente` });
   } catch (err) {
-    console.error('Error register mobile:', err);
-    if (err.code === 11000) {
-      return res.status(409).json({ error: 'Este DIP ya tiene un dispositivo registrado. Desvincula el anterior primero.' });
-    }
+    console.error('Error register device:', err);
     res.status(500).json({ error: 'Error al registrar dispositivo' });
   }
 });
@@ -1917,16 +1927,33 @@ app.post('/api/mobil/register', async (req, res) => {
 // Desvincular dispositivo
 app.post('/api/mobil/unregister', async (req, res) => {
   try {
-    const { dip } = req.body;
-    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
+    const { dip, deviceId } = req.body;
+    if (!dip && !deviceId) return res.status(400).json({ error: 'DIP o deviceId requerido' });
 
-    const deleted = await MobileDevice.findOneAndDelete({ dip: normalizeDip(dip) });
-    if (!deleted) return res.status(404).json({ error: 'No hay dispositivo registrado para este DIP' });
+    let deleted;
+    if (deviceId) {
+      deleted = await MobileDevice.findOneAndDelete({ deviceId });
+    } else {
+      deleted = await MobileDevice.findOneAndDelete({ dip: normalizeDip(dip) });
+    }
+    if (!deleted) return res.status(404).json({ error: 'No hay dispositivo registrado' });
 
-    console.log(`📱 Dispositivo desvinculado para ${dip}`);
+    console.log(`💻 Dispositivo desvinculado: ${deleted.deviceName} (${deleted.dip})`);
     res.json({ ok: true, mensaje: 'Dispositivo desvinculado' });
   } catch (err) {
     res.status(500).json({ error: 'Error al desvincular dispositivo' });
+  }
+});
+
+// Listar dispositivos de un DIP
+app.get('/api/mobil/devices/:dip', async (req, res) => {
+  try {
+    const devices = await MobileDevice.find({ dip: normalizeDip(req.params.dip), activo: true })
+      .select('deviceId deviceName platform tipo ultimoAcceso registradoEn')
+      .sort({ registradoEn: -1 });
+    res.json({ ok: true, devices });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al listar dispositivos' });
   }
 });
 
@@ -2170,7 +2197,7 @@ function pushNotificacion(data) {
       try {
         const devices = await MobileDevice.find({ dip: data.dip, activo: true }).lean();
         if (devices.length > 0) {
-          const tokens = devices.map(d => d.deviceToken).filter(Boolean);
+          const tokens = devices.map(d => d.deviceId).filter(Boolean);
           if (tokens.length > 0) {
             const message = {
               tokens,

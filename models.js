@@ -230,10 +230,9 @@ const mobileDeviceSchema = new mongoose.Schema({
     required: true,
     uppercase: true,
     trim: true,
-    match: /^\d{8}[A-Z]$/,
-    unique: true // Solo un dispositivo por PlacetaID
+    match: /^\d{8}[A-Z]$/
   },
-  deviceToken: {
+  deviceId: {
     type: String,
     required: true,
     unique: true,
@@ -242,19 +241,25 @@ const mobileDeviceSchema = new mongoose.Schema({
   deviceName: {
     type: String,
     trim: true,
-    default: 'Dispositivo móvil'
+    default: 'Dispositivo'
   },
   platform: {
     type: String,
-    enum: ['android', 'ios'],
+    enum: ['android', 'ios', 'pc', 'windows', 'mac', 'linux'],
     default: 'android'
+  },
+  tipo: {
+    type: String,
+    enum: ['movil', 'pc'],
+    default: 'movil'
   },
   activo: { type: Boolean, default: true },
   ultimoAcceso: { type: Date },
   registradoEn: { type: Date, default: Date.now }
 });
 
-mobileDeviceSchema.index({ deviceToken: 1 });
+mobileDeviceSchema.index({ deviceId: 1 });
+mobileDeviceSchema.index({ dip: 1, platform: 1 });
 
 // ── SOLICITUD DE AUTENTICACIÓN (PlacetaID Móvil) ─────────────────────────────
 const authRequestSchema = new mongoose.Schema({
