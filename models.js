@@ -153,7 +153,7 @@ const logSchema = new mongoose.Schema({
   },
   ip: { type: String },
   userAgent: { type: String },
-  fase: { type: String, enum: ['fase1', 'fase2', 'completa'] },
+  fase: { type: String, enum: ['fase1', 'fase2', 'completa', 'registro_dispositivo'] },
   intentoNumero: { type: Number },
   metadatos: { type: mongoose.Schema.Types.Mixed },
   timestamp: { type: Date, default: Date.now }

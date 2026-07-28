@@ -1858,12 +1858,12 @@ app.post('/api/mobil/register', async (req, res) => {
     // Verify password
     const passwordValid = await bcrypt.compare(password, registro.passwordHash);
     if (!passwordValid) {
-      await registrarLog({
+      try { await registrarLog({
         dip: cleanDip, registroId: registro._id,
         servicio: 'PlacetaID', evento: 'error_credenciales',
         ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
         metadatos: { accion: 'registro_dispositivo', resultado: 'password_incorrecta' }
-      });
+      }); } catch (_) {}
       return res.status(401).json({ error: 'Contraseña incorrecta' });
     }
 
@@ -1881,25 +1881,22 @@ app.post('/api/mobil/register', async (req, res) => {
       return res.status(409).json({ error: 'Ya tienes un móvil vinculado. Desvincula el anterior primero.' });
     }
 
-    // Check if deviceId already exists (update it)
-    // Check if deviceId or existing device for this DIP+tipo exists
-    const existing = await MobileDevice.findOne({
-      $or: [{ deviceId: devId }, { dip: cleanDip, tipo }]
-    });
+    // Buscar cualquier dispositivo de este DIP (actualizarlo, no crear duplicado)
+    const existing = await MobileDevice.findOne({ dip: cleanDip });
     if (existing) {
-      existing.dip = cleanDip;
+      existing.deviceId = devId;
       existing.deviceName = deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
       existing.platform = platform || (tipo === 'pc' ? 'windows' : 'android');
       existing.tipo = tipo;
       existing.activo = true;
       existing.ultimoAcceso = new Date();
       await existing.save();
-      await registrarLog({
+      try { await registrarLog({
         dip: cleanDip, registroId: registro._id,
         servicio: 'PlacetaID', evento: 'intento_exitoso',
         ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
         metadatos: { accion: 'registro_dispositivo', resultado: 'actualizado', tipo }
-      });
+      }); } catch (_) {}
       return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado` });
     }
 
