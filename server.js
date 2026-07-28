@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const path = require('path');
 const crypto = require('crypto');
+try { require('dotenv').config(); } catch {} // Load .env if available
 let firebaseAdmin = null;
 let firebaseInitAttempted = false;
 function initFirebase() {
@@ -174,8 +175,9 @@ async function connectToDatabase() {
     console.log('🔌 MongoDB connection attempt...');
 
     await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 15000,
       maxPoolSize: 10,
       minPoolSize: 1,
       maxIdleTimeMS: 30000,
@@ -472,10 +474,6 @@ async function backfillSupportNumbers() {
         try {
           user.supportNumber = await generateUniqueSupportNumber();
           await user.save();
-        } catch (err) {
-          console.warn(`   ⚠️ Error backfilling ${user.dip || user._id}: ${err.message?.slice(0, 80)}`);
-        }
-      }
         } catch (err) {
           console.warn(`   ⚠️ Error backfilling ${user.dip || user._id}: ${err.message?.slice(0, 80)}`);
         }
@@ -3147,6 +3145,23 @@ app.get('/api/admin/grupos/:grupo/dips', verifyAdminApiKey, async (req, res) => 
 // Catch-all for SPA (DEBE ir al final, después de todas las rutas)
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ── Global error handler ─────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err?.message || err);
+  res.status(500).json({ error: 'Error interno del servidor', detail: err?.message });
+});
+
+// ── Unhandled promise rejections ────────────────────────────────────────
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// ── Uncaught exceptions (prevent crash) ─────────────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err?.message || err);
+  console.error(err?.stack);
 });
 
 // En desarrollo local, executar: npm start
