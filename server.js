@@ -1963,8 +1963,18 @@ app.get('/api/mobil/devices/:dip', async (req, res) => {
     const devices = await MobileDevice.find({ dip: normalizeDip(req.params.dip), activo: true })
       .select('deviceId deviceName platform tipo ultimoAcceso registradoEn')
       .sort({ registradoEn: -1 });
-    res.json({ ok: true, devices });
+    // Para documentos antiguos sin deviceId, usar _id como fallback
+    const result = devices.map(d => ({
+      deviceId: d.deviceId || d._id.toString(),
+      deviceName: d.deviceName || 'Dispositivo',
+      platform: d.platform || 'desconocida',
+      tipo: d.tipo || 'movil',
+      ultimoAcceso: d.ultimoAcceso,
+      registradoEn: d.registradoEn
+    }));
+    res.json({ ok: true, devices: result });
   } catch (err) {
+    console.error('Error listar dispositivos:', err);
     res.status(500).json({ error: 'Error al listar dispositivos' });
   }
 });
