@@ -2332,7 +2332,8 @@ async function rspRegistrarPlaceta(entidad, tipo, endpoint, dip = '') {
   try {
     const ADMIN_API = process.env.ADMIN_API_URL || 'https://admin-placeta.vercel.app';
     const API_KEY = process.env.DOCS_API_KEY || 'docs-shared-key-2026';
-    await fetch(`${ADMIN_API}/rsp/api/conexiones/registrar?api_key=${API_KEY}`, {
+    const url = `${ADMIN_API}/rsp/api/conexiones/registrar?api_key=${API_KEY}`;
+    const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2343,9 +2344,17 @@ async function rspRegistrarPlaceta(entidad, tipo, endpoint, dip = '') {
         dip: dip || '',
         detalle: 'Votación desde PlacetaID Móvil'
       }),
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(10000)
     });
-  } catch (e) { /* Silencioso - no crítico */ }
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => 'sin cuerpo');
+      console.warn(`[RSP] Admin respondió ${resp.status}: ${text.slice(0,100)}`);
+    } else {
+      console.log(`[RSP] ✅ Conexión registrada: ${tipo} ${endpoint}`);
+    }
+  } catch (e) {
+    console.error('[RSP] Error registrando conexión en admin-placeta:', e.message);
+  }
 }
 
 async function syncFirmaAAdmin(doc, dip, firmaBase64) {
