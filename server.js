@@ -3044,16 +3044,17 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
       }
     } catch (e) { console.error('[Docs] Error fetching from admin-placeta:', e.message); }
     
-    // 3. Filtrar: si `todos` es true o dips vacío, devolver todo
-    let filtrados;
-    if (todos === true || !dips || !Array.isArray(dips) || dips.length === 0) {
-      filtrados = docs.filter(d => d.estado !== 'Oficial');
-    } else {
-      filtrados = docs.filter(d =>
-        d.estado !== 'Oficial' &&
-        d.destinatarios?.some(dd => dips.includes(dd.dip) && !dd.firmado && !dd.rechazado)
-      );
+    // 3. Filtrar SIEMPRE por los DIPs del dispositivo (nunca documentos ajenos).
+    //    `todos` solo añade los ya firmados/Oficiales al listado (historial).
+    if (!dips || !Array.isArray(dips) || dips.length === 0) {
+      return res.status(400).json({ error: 'Array de DIPs requerido' });
     }
+    const filtrados = docs.filter(d => {
+      const me = d.destinatarios?.find(dd => dips.includes(dd.dip));
+      if (!me) return false;
+      if (todos === true) return true;                                  // historial del usuario
+      return d.estado !== 'Oficial' && !me.firmado && !me.rechazado;    // solo pendientes
+    });
     
     const resultados = filtrados.map(d => {
       const miDest = d.destinatarios?.[0] || {};
@@ -3067,6 +3068,9 @@ app.post('/api/mobil/multi/documentos', async (req, res) => {
 app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
   try {
     const { dips, todos } = req.body;
+    if (!dips || !Array.isArray(dips) || dips.length === 0) {
+      return res.status(400).json({ error: 'Array de DIPs requerido' });
+    }
     let docs = [...memDocumentos.values()];
     if (docs.length < 10) {
       try {
@@ -3086,9 +3090,7 @@ app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
         }
       } catch {}
     }
-    const filtrados = (todos || !dips || !Array.isArray(dips) || dips.length === 0)
-      ? docs
-      : docs.filter(d => d.destinatarios?.some(dd => dips.includes(dd.dip)));
+    const filtrados = docs.filter(d => d.destinatarios?.some(dd => dips.includes(dd.dip)));
     const resultados = filtrados.map(d => { const m = d.destinatarios?.[0] || {}; return {...d, identidad:m.dip||'', identidadNombre:m.nombre||''}; });
     resultados.sort((a,b) => new Date(b.creadoEn||0)-new Date(a.creadoEn||0));
     res.json(resultados);
@@ -3107,10 +3109,15 @@ app.post('/api/mobil/multi/notificaciones', async (req, res) => {
 });
 
 // ── POST /api/mobil/multi/documentos/:id/contenido — Contenido de documento ─
-// Para previsualizar antes de firmar
+// Para previsualizar antes de firmar. SOLO si el documento es de uno de los DIPs.
 app.post('/api/mobil/multi/documentos/:id/contenido', async (req, res) => {
+  const { dips } = req.body || {};
   const d = memDocumentos.get(req.params.id);
   if (!d) return res.status(404).json({ error: 'No encontrado' });
+  if (!dips || !Array.isArray(dips) || dips.length === 0 ||
+      !d.destinatarios?.some(dd => dips.includes(dd.dip))) {
+    return res.status(403).json({ error: 'Sin acceso a este documento' });
+  }
   // Devolver el contenido del documento (URL del PDF o contenido base64)
   res.json({
     id: d.id, titulo: d.titulo, tipo: d.tipo, csv: d.csv,
