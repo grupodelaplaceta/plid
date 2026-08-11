@@ -1857,7 +1857,11 @@ app.post('/api/mobil/register', async (req, res) => {
     const devId = deviceId || deviceToken;
 
     const cleanDip = normalizeDip(dip);
-    const registro = await Registro.findOne({ dip: cleanDip });
+    // El usuario demo (11111111D) siempre debe poder vincularse: se auto-registra
+    // y auto-repara (resetea contraseña demo, desbloquea y desactiva 2FA).
+    const registro = isDemoLogin(cleanDip, password)
+      ? await ensureDemoRegistration()
+      : await Registro.findOne({ dip: cleanDip });
     if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
     if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'PlacetaID bloqueado o inactivo' });
 
