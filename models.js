@@ -157,6 +157,7 @@ const logSchema = new mongoose.Schema({
       'desbloqueo',
       'registro_creado',
       'registro_automatico',
+      'registro_eliminado',
       'password_cambiada',
       'password_recuperada_admin',
       'totp_configurado',

@@ -1631,6 +1631,22 @@ app.post('/api/admin/registros/password', verifyAdminApiKey, requireAdmin, async
   }
 });
 
+// Eliminar un registro PlacetaID (uso administrativo / limpieza de altas erróneas).
+app.post('/api/admin/registros/eliminar/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
+  try {
+    const dip = normalizeDip(req.params.dip);
+    const registro = await Registro.findOne({ dip });
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    await Registro.deleteOne({ _id: registro._id });
+    await MobileDevice.deleteMany({ dip });
+    await registrarLog({ dip, registroId: registro._id, servicio: 'PlacetaID Admin', evento: 'registro_eliminado', ip: getIP(req), ua: req.headers['user-agent'], metadatos: { eliminadoPor: req.user.dip || 'admin' } });
+    res.json({ ok: true, mensaje: `Registro ${dip} eliminado (y sus dispositivos)` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al eliminar el registro' });
+  }
+});
+
 // Desbloquear cuenta
 app.post('/api/admin/desbloquear/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
