@@ -31,8 +31,11 @@ const registroSchema = new mongoose.Schema({
     required: function () { return this.rol !== 'empresa' && this.dip; }
   },
   fechaNacimiento: {
-    type: Date,
-    required: function () { return this.rol !== 'empresa' && this.dip; }
+    type: Date
+    // Opcional: en las altas automáticas desde el padrón del banco no se conoce
+    // la fecha de nacimiento. La validación funcional en createPlacetaIdRegistration
+    // la exige para registros manuales (personal). La edad queda null hasta que el
+    // ciudadano complete su perfil.
   },
   empresaNombre: {
     type: String,
