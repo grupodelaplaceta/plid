@@ -88,6 +88,13 @@ const registroSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  // Versión de sesión: se incrementa al cambiar la contraseña. Todos los JWT
+  // emitidos con una versión anterior quedan inválidos (cierre de sesión global).
+  tokenVersion: { type: Number, default: 0 },
+  // Contraseña temporal (alta automática) cifrada con AES-256-GCM para que el
+  // admin pueda descifrarla y enviársela al ciudadano. Se borra al cambiar.
+  passwordDefaultCifrado: { type: String },
+  passwordChangedAt: { type: Date },
   ultimoAcceso: { type: Date },
   propietarios: {
     type: [
@@ -146,6 +153,9 @@ const logSchema = new mongoose.Schema({
       'bloqueo_activado',
       'desbloqueo',
       'registro_creado',
+      'registro_automatico',
+      'password_cambiada',
+      'password_recuperada_admin',
       'totp_configurado',
       'totp_recuperado'
     ],
