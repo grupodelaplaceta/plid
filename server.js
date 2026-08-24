@@ -108,9 +108,8 @@ const BUILTIN_SOLICITANTES = [
     nombre: 'Voley Club La Placeta',
     descripcion: 'Web y area del jugador del Voley Club La Placeta.',
     plataforma: 'web',
-    urlOrigen: 'https://voleyclub.laplaceta.org/',
+    urlOrigen: 'https://vclaplaceta.vercel.app/',
     redirectUris: [
-      'https://voleyclub.laplaceta.org/auth/callback.html',
       'https://vclaplaceta.vercel.app/auth/callback.html',
       'http://localhost:3000/auth/callback.html'
     ],
