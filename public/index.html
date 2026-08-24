@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" href="assets/faviid.png">
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════════════════════
    PlacetaID — Design System
@@ -18,23 +18,23 @@
 /* ── Variables de Color ──────────────────────────────────────── */
 :root {
   /* ── Brand (publico.css) ── */
-  --p:  #3f00d8;
-  --pd: #1c005f;
+  --p:  #6d28d9;
+  --pd: #4c1d95;
 
   --accent:      var(--p);
   --accent-dark: var(--pd);
-  --accent-soft: rgba(63, 0, 216, 0.09);
+  --accent-soft: rgba(109, 40, 217, 0.10);
 
   /* ── Aliases ── */
   --primary:       var(--p);
   --primary-dark:  var(--pd);
-  --primary-light: #5a1fe8;
-  --primary-glow:  rgba(63, 0, 216, 0.2);
+  --primary-light: #8b5cf6;
+  --primary-glow:  rgba(109, 40, 217, 0.2);
 
   /* ── Surfaces (publico.css) ── */
-  --bg:        #f5f3f7;
+  --bg:        #f7f5fb;
   --surface:   #ffffff;
-  --surface-2: #f1eef8;
+  --surface-2: #f4f1fa;
 
   /* ── Text (publico.css) ── */
   --text:       #111111;
@@ -93,9 +93,9 @@
   --border-bright: #7c5ee8;
 
   /* ── Typography ── */
-  --font:  'Outfit', sans-serif;
-  --mono:  'Outfit', sans-serif;
-  --sans:  'Outfit', sans-serif;
+  --font:  'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono:  'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --sans:  'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
 
   /* ── Radius (publico.css) ── */
   --radius-sm:  8px;
@@ -112,9 +112,9 @@
   --transition: 0.2s ease;
 
   /* ── Dynamic branding (sobrescrito por JS) ── */
-  --dynamic-text: #fff;
-  --dynamic-text-muted: rgba(255,255,255,0.5);
-  --dynamic-surface: rgba(255,255,255,0.07);
+  --dynamic-text: #1e1b2e;
+  --dynamic-text-muted: rgba(30,27,46,0.6);
+  --dynamic-surface: rgba(109,40,217,0.06);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -123,8 +123,8 @@ html { scroll-behavior: smooth; }
 
 body {
   font-family: var(--font);
-  background: #1c005f;
-  color: #fff;
+  background: #f7f5fb;
+  color: #1e1b2e;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -146,7 +146,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: #1c005f;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f1fa 55%, #ede9fe 100%);
   overflow: hidden;
   transition: background 0.5s ease;
 }
@@ -1282,7 +1282,7 @@ textarea.form-input { resize: vertical; }
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: #1c005f;
+  background: #f7f5fb;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1307,12 +1307,12 @@ textarea.form-input { resize: vertical; }
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.12);
+  background: rgba(109,40,217,0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 0.25rem;
-  box-shadow: 0 0 30px rgba(255,255,255,0.08);
+  box-shadow: 0 0 30px rgba(109,40,217,0.08);
 }
 .splash-icon-wrap svg {
   width: 36px;
@@ -1323,16 +1323,16 @@ textarea.form-input { resize: vertical; }
   font-size: 2rem;
   font-weight: 900;
   letter-spacing: -0.04em;
-  color: #fff;
+  color: #1e1b2e;
   line-height: 1.1;
 }
 .splash-title em {
   font-style: normal;
-  color: rgba(255,255,255,0.65);
+  color: rgba(30,27,46,0.55);
 }
 .splash-subtitle {
   font-size: 0.95rem;
-  color: rgba(255,255,255,0.7);
+  color: #57536b;
   font-weight: 400;
   letter-spacing: 0.02em;
 }
@@ -1342,8 +1342,8 @@ textarea.form-input { resize: vertical; }
 .splash-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid rgba(255,255,255,0.15);
-  border-top-color: #fff;
+  border: 3px solid rgba(109,40,217,0.15);
+  border-top-color: #6d28d9;
   border-radius: 50%;
   animation: splashSpin 0.8s linear infinite;
 }
@@ -1353,7 +1353,7 @@ textarea.form-input { resize: vertical; }
 .splash-brand {
   margin-top: 1.5rem;
   font-size: 0.68rem;
-  color: rgba(255,255,255,0.35);
+  color: #8a86a0;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 500;
@@ -3462,12 +3462,12 @@ function resetDynamicBranding() {
   document.body.style.color = '';
   const landing = document.querySelector('.landing-bg');
   if (landing) landing.style.background = '';
-  document.documentElement.style.setProperty('--dynamic-text', '#fff');
-  document.documentElement.style.setProperty('--dynamic-text-muted', 'rgba(255,255,255,0.5)');
-  document.documentElement.style.setProperty('--dynamic-surface', 'rgba(255,255,255,0.07)');
+  document.documentElement.style.setProperty('--dynamic-text', '#1e1b2e');
+  document.documentElement.style.setProperty('--dynamic-text-muted', 'rgba(30,27,46,0.6)');
+  document.documentElement.style.setProperty('--dynamic-surface', 'rgba(109,40,217,0.06)');
   // También restaurar splash por defecto
   const splash = document.getElementById('loadingOverlay');
-  if (splash) splash.style.background = '#1c005f';
+  if (splash) splash.style.background = '#f7f5fb';
 }
 
 // ── MOBILE SIDEBAR TOGGLE ────────────────────────────────────────────────────

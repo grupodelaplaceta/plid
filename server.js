@@ -36,40 +36,6 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctbCg9KcYUrO8@cluster0.m5bntoj.mongodb.net/';
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRY = '5d'; // Tokens de 5 días según requerimiento
-// Clave para cifrar/descifrar la contraseña temporal de los altas automáticas.
-// El admin la descifra para poder enviársela al ciudadano. ¡Configurar en Vercel!
-const PASSWORD_DEFAULT_SECRET = process.env.PASSWORD_DEFAULT_SECRET || 'placetaid-password-default-dev-secret';
-
-// Cifra la contraseña temporal (AES-256-GCM) para recuperación por parte del admin.
-function cifrarPasswordDefault(plain) {
-  const key = crypto.createHash('sha256').update(PASSWORD_DEFAULT_SECRET).digest();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `gcm:${iv.toString('base64')}:${tag.toString('base64')}:${enc.toString('base64')}`;
-}
-
-// Descifra la contraseña temporal. Devuelve null si no está almacenada o no es válida.
-function descifrarPasswordDefault(stored) {
-  if (!stored || !stored.startsWith('gcm:')) return null;
-  try {
-    const key = crypto.createHash('sha256').update(PASSWORD_DEFAULT_SECRET).digest();
-    const [, ivB64, tagB64, encB64] = stored.split(':');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(encB64, 'base64')), decipher.final()]).toString('utf8');
-  } catch (e) {
-    return null;
-  }
-}
-
-// Genera una contraseña temporal fuerte y derivada (para el alta automática).
-function generarPasswordTemporal(dip) {
-  const base = String(dip || '').replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase();
-  const rnd = crypto.randomBytes(3).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 4);
-  return `Placeta${base || 'GDLP'}${rnd}!`;
-}
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
 const ADMIN_DESKTOP_CLIENT_ID = process.env.PLACETAID_ADMIN_DESKTOP_CLIENT_ID || 'administracion-gdlp';
 const ADMIN_DESKTOP_CALLBACK = process.env.PLACETAID_ADMIN_DESKTOP_CALLBACK || 'http://127.0.0.1:18731/callback';
@@ -134,6 +100,21 @@ const BUILTIN_SOLICITANTES = [
       'http://localhost:3000/'
     ],
     apiKey: process.env.PLACETAID_BANCO_CLIENT_ID || 'banco-web',
+    activo: true,
+    pkceRequired: false,
+    permitirWebFallback: true
+  },
+  {
+    nombre: 'Voley Club La Placeta',
+    descripcion: 'Web y area del jugador del Voley Club La Placeta.',
+    plataforma: 'web',
+    urlOrigen: 'https://voleyclub.laplaceta.org/',
+    redirectUris: [
+      'https://voleyclub.laplaceta.org/auth/callback.html',
+      'https://vclaplaceta.vercel.app/auth/callback.html',
+      'http://localhost:3000/auth/callback.html'
+    ],
+    apiKey: process.env.PLACETAID_VOLEY_CLIENT_ID || 'voley-club',
     activo: true,
     pkceRequired: false,
     permitirWebFallback: true
@@ -363,7 +344,7 @@ async function findActiveSolicitante(apiKey) {
   return builtin || null;
 }
 
-async function verifyToken(req, res, next) {
+function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token requerido' });
   const token = auth.slice(7);
@@ -383,29 +364,13 @@ async function verifyToken(req, res, next) {
           apellidos: decoded.apellidos,
           nombreCompleto: decoded.nombreCompleto,
           edad: decoded.edad,
-          accesoComo: decoded.accesoComo,
-          tv: decoded.tv
+          accesoComo: decoded.accesoComo
         },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRY }
       );
       res.setHeader('X-New-Token', newToken);
       res.setHeader('Access-Control-Expose-Headers', 'X-New-Token');
-    }
-
-    // Sesiones revocables: si la contraseña cambió, la versión de token sube y
-    // todos los JWT anteriores quedan inválidos ("se cierra de todos los lados").
-    if (decoded.registroId) {
-      const r = await Registro.findById(decoded.registroId).select('tokenVersion activo bloqueado');
-      if (!r || !r.activo || r.bloqueado) {
-        return res.status(401).json({ error: 'Sesión inválida. Vuelve a iniciar sesión.' });
-      }
-      if (typeof decoded.tv === 'number' && (r.tokenVersion || 0) !== decoded.tv) {
-        return res.status(401).json({
-          error: 'Sesión cerrada: tu contraseña fue modificada. Vuelve a iniciar sesión con tu DIP y contraseña.',
-          sesionCerrada: true
-        });
-      }
     }
 
     next();
@@ -645,8 +610,7 @@ async function completeLogin(registro, payload, req, fase = 'completa') {
       supportNumber: datosRegistro.supportNumber,
       points: datosRegistro.points,
       banned: datosRegistro.banned,
-      bannedUntil: datosRegistro.bannedUntil,
-      tv: registro.tokenVersion || 0
+      bannedUntil: datosRegistro.bannedUntil
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
@@ -732,21 +696,15 @@ async function generateUniqueDip(nombre) {
 }
 
 async function createPlacetaIdRegistration(payload, context = {}) {
-  const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios, automatico } = payload;
+  const { dip, nombre, apellidos, fechaNacimiento, rol, password, empresaNombre, empresaCIF, propietarios } = payload;
   const cleanRol = rol || 'miembro';
   const cleanDip = normalizeDip(dip) || await generateUniqueDip(nombre);
   const pendingMigration = await MigracionPendiente.findOne({ dip: cleanDip, estado: 'pendiente' });
   const requestedPlaceId = payload.placeid || payload.placeId || payload.place_id || payload.placetaId;
   const cleanPlaceId = normalizePlaceId(pendingMigration?.placeid || requestedPlaceId || cleanDip);
   const cleanCorreo = normalizeEmail(payload.correo || payload.email);
-  // Alta automática (desde el padrón del banco): se relaja la validación y se
-  // guarda la contraseña temporal cifrada para que el admin pueda recuperarla.
-  const esAutomatico = automatico === true || automatico === 'true';
 
-  // Contraseña temporal: si el admin no la envía, se genera una derivada y fuerte.
-  const passwordTemporal = password || (esAutomatico ? generarPasswordTemporal(cleanDip) : undefined);
-
-  if (!cleanDip || !nombre || !passwordTemporal) {
+  if (!cleanDip || !nombre || !password) {
     const error = new Error('DIP, nombre y contraseña son requeridos');
     error.statusCode = 400;
     throw error;
@@ -762,14 +720,12 @@ async function createPlacetaIdRegistration(payload, context = {}) {
       error.statusCode = 400;
       throw error;
     }
-  } else if (!esAutomatico && (!apellidos || !fechaNacimiento)) {
+  } else if (!apellidos || !fechaNacimiento) {
     const error = new Error('Apellidos y fecha de nacimiento son requeridos para registros personales');
     error.statusCode = 400;
     throw error;
   }
-  // Los DIPs del banco son DNI reales (letra de control, no la inicial del nombre),
-  // por eso en altas automáticas se omite la validación de inicial.
-  if (!pendingMigration && !esAutomatico) validateDipForName(cleanDip, nombre);
+  if (!pendingMigration) validateDipForName(cleanDip, nombre);
 
   const existe = await Registro.findOne({ dip: cleanDip });
   if (existe) {
@@ -778,7 +734,7 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     throw error;
   }
 
-  const passwordHash = await bcrypt.hash(passwordTemporal, 12);
+  const passwordHash = await bcrypt.hash(password, 12);
   const totp = speakeasy.generateSecret({ name: `PlacetaID:${cleanDip}`, issuer: 'Grupo de La Placeta', length: 20 });
   const supportNumber = await generateUniqueSupportNumber();
   const registroData = {
@@ -792,11 +748,6 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     totpVerified: false,
     supportNumber
   };
-  if (esAutomatico) {
-    // Se guarda la contraseña temporal CIFRADA para que el admin pueda
-    // descifrarla y enviársela al ciudadano (hasta que la cambie).
-    registroData.passwordDefaultCifrado = cifrarPasswordDefault(passwordTemporal);
-  }
 
   if (cleanRol === 'empresa') {
     registroData.empresaNombre = String(empresaNombre).trim();
@@ -808,8 +759,8 @@ async function createPlacetaIdRegistration(payload, context = {}) {
       porcentaje: owner.porcentaje
     }));
   } else {
-    registroData.apellidos = String(apellidos || 'GDLP').trim();
-    if (fechaNacimiento) registroData.fechaNacimiento = new Date(fechaNacimiento);
+    registroData.apellidos = String(apellidos).trim();
+    registroData.fechaNacimiento = new Date(fechaNacimiento);
   }
 
   const registro = await Registro.create(registroData);
@@ -826,15 +777,14 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     registroId: registro._id,
     servicio: context.servicio || 'PlacetaID',
     servicioUrl: context.servicioUrl,
-    evento: esAutomatico ? 'registro_automatico' : 'registro_creado',
+    evento: 'registro_creado',
     ip: context.ip,
     ua: context.ua,
     fase: 'completa',
     metadatos: {
       ...context.metadatos,
       migracionPendiente: Boolean(pendingMigration),
-      placeidAnterior: pendingMigration?.placeidAnterior,
-      altaAutomatica: esAutomatico
+      placeidAnterior: pendingMigration?.placeidAnterior
     }
   });
 
@@ -854,7 +804,6 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     totpSecret: totp.base32,
     qrCode: qrUrl,
     otpauthUrl,
-    passwordTemporal: esAutomatico ? passwordTemporal : undefined,
     mensaje: 'Registro creado. Escanea el QR con tu autenticador y verifica el primer código.'
   };
 }
@@ -869,76 +818,6 @@ app.get('/api/auth/session', verifyToken, async (req, res) => {
     res.json({ ok: true, registro: publicRegistroData(registro) });
   } catch (err) {
     res.status(500).json({ error: 'Error al validar sesión' });
-  }
-});
-
-// CAMBIO DE CONTRASEÑA: verifica la actual, fija la nueva, elimina la temporal
-// cifrada y cierra TODAS las sesiones y dispositivos (tokenVersion + MobileDevice).
-app.post('/api/auth/cambiar-password', verifyToken, async (req, res) => {
-  const { passwordActual, passwordNueva } = req.body;
-  if (!passwordActual || !passwordNueva) {
-    return res.status(400).json({ error: 'Contraseña actual y nueva son requeridas' });
-  }
-  const nueva = String(passwordNueva);
-  if (nueva.length < 8) {
-    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-  }
-  if (!/[A-Za-z]/.test(nueva) || !/[0-9]/.test(nueva)) {
-    return res.status(400).json({ error: 'La contraseña debe incluir letras y números' });
-  }
-
-  try {
-    const registro = await Registro.findById(req.user.registroId);
-    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
-    if (registro.bloqueado || !registro.activo) {
-      return res.status(403).json({ error: 'Registro bloqueado o inactivo' });
-    }
-
-    const valid = await bcrypt.compare(String(passwordActual), registro.passwordHash);
-    if (!valid) {
-      await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID', evento: 'error_credenciales', ip: getIP(req), ua: req.headers['user-agent'], fase: 'completa', metadatos: { accion: 'cambiar_password', resultado: 'password_actual_incorrecta' } });
-      return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
-    }
-
-    registro.passwordHash = await bcrypt.hash(nueva, 12);
-    // Ya no se puede recuperar la temporal con el admin.
-    registro.passwordDefaultCifrado = undefined;
-    registro.passwordChangedAt = new Date();
-    // Invalida todos los JWT emitidos con la versión anterior.
-    registro.tokenVersion = (registro.tokenVersion || 0) + 1;
-    await registro.save();
-
-    // Cierra todos los dispositivos vinculados (móvil y PCs).
-    await MobileDevice.updateMany({ dip: registro.dip }, { $set: { activo: false } });
-
-    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID', evento: 'password_cambiada', ip: getIP(req), ua: req.headers['user-agent'], fase: 'completa', metadatos: { sesionesCerradas: true, tokenVersion: registro.tokenVersion } });
-
-    res.json({
-      ok: true,
-      mensaje: 'Contraseña actualizada. Se han cerrado todas las sesiones: vuelve a iniciar sesión con tu DIP y contraseña.',
-      sesionesCerradas: true,
-      tokenVersion: registro.tokenVersion
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al cambiar la contraseña' });
-  }
-});
-
-// RECUPERAR CONTRASEÑA TEMPORAL (para el ciudadano) — requiere la actual.
-// Devuelve la contraseña temporal si aún no ha sido modificada por el usuario.
-app.post('/api/auth/recuperar-temporal', verifyToken, async (req, res) => {
-  try {
-    const registro = await Registro.findById(req.user.registroId);
-    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
-    const temporal = descifrarPasswordDefault(registro.passwordDefaultCifrado);
-    res.json({
-      ok: Boolean(temporal),
-      passwordTemporal: temporal,
-      mensaje: temporal ? 'Esta es la contraseña temporal asignada por la administración. Cámbiala en cuanto puedas.' : 'No hay contraseña temporal almacenada (ya fue modificada).'
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Error al recuperar la contraseña temporal' });
   }
 });
 
@@ -1568,85 +1447,6 @@ app.get('/api/admin/registros', verifyAdminApiKey, requireAdmin, async (req, res
   }
 });
 
-// Alta automática de un ciudadano en PlacetaID (desde el padrón del banco).
-// Crea el registro con contraseña temporal recuperable por el admin.
-app.post('/api/admin/registros/crear', verifyAdminApiKey, requireAdmin, async (req, res) => {
-  try {
-    const body = { ...req.body, automatico: true };
-    if (!body.password) body.password = generarPasswordTemporal(body.dip);
-    const result = await createPlacetaIdRegistration(body, {
-      servicio: 'PlacetaID Admin',
-      servicioUrl: req.headers.origin,
-      ip: getIP(req),
-      ua: req.headers['user-agent'],
-      metadatos: { creadoPorAdmin: true, origen: 'padron_banco' }
-    });
-    res.status(201).json({
-      ok: true,
-      dip: result.dip,
-      placeid: result.placeid,
-      nombre: result.nombre,
-      apellidos: result.apellidos,
-      rol: result.rol,
-      passwordTemporal: result.passwordTemporal,
-      mensaje: `Ciudadano ${result.dip} dado de alta en PlacetaID. Envía la contraseña temporal de forma segura.`
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Error al crear el registro' });
-  }
-});
-
-// Recuperar la contraseña temporal de un ciudadano (para enviársela).
-// Solo disponible mientras el usuario no la haya cambiado.
-app.post('/api/admin/registros/password', verifyAdminApiKey, requireAdmin, async (req, res) => {
-  try {
-    const { dip } = req.body;
-    if (!dip) return res.status(400).json({ error: 'DIP requerido' });
-    const registro = await Registro.findOne({ dip: normalizeDip(dip) });
-    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
-
-    const temporal = descifrarPasswordDefault(registro.passwordDefaultCifrado);
-    if (!temporal) {
-      return res.status(404).json({
-        ok: false,
-        error: 'No hay contraseña temporal almacenada (ya fue modificada por el ciudadano).',
-        codigo: 'sin_temporal'
-      });
-    }
-
-    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID Admin', evento: 'password_recuperada_admin', ip: getIP(req), ua: req.headers['user-agent'], metadatos: { recuperadaPor: req.user.dip || 'admin' } });
-
-    res.json({
-      ok: true,
-      dip: registro.dip,
-      placeid: registro.placeid,
-      nombre: `${registro.nombre} ${registro.apellidos || ''}`.trim(),
-      passwordTemporal: temporal,
-      mensaje: 'Contraseña temporal recuperada. Envíala de forma segura y pide al ciudadano que la cambie.'
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al recuperar la contraseña temporal' });
-  }
-});
-
-// Eliminar un registro PlacetaID (uso administrativo / limpieza de altas erróneas).
-app.post('/api/admin/registros/eliminar/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
-  try {
-    const dip = normalizeDip(req.params.dip);
-    const registro = await Registro.findOne({ dip });
-    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
-    await Registro.deleteOne({ _id: registro._id });
-    await MobileDevice.deleteMany({ dip });
-    await registrarLog({ dip, registroId: registro._id, servicio: 'PlacetaID Admin', evento: 'registro_eliminado', ip: getIP(req), ua: req.headers['user-agent'], metadatos: { eliminadoPor: req.user.dip || 'admin' } });
-    res.json({ ok: true, mensaje: `Registro ${dip} eliminado (y sus dispositivos)` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al eliminar el registro' });
-  }
-});
-
 // Desbloquear cuenta
 app.post('/api/admin/desbloquear/:dip', verifyAdminApiKey, requireAdmin, async (req, res) => {
   try {
@@ -2146,53 +1946,6 @@ app.post('/api/mobil/register', async (req, res) => {
   } catch (err) {
     console.error('Error register device:', err);
     res.status(500).json({ error: 'Error al registrar dispositivo' });
-  }
-});
-
-// Cambio de contraseña desde la app (móvil/desktop), autenticando con la
-// contraseña ACTUAL (mismo modelo que /api/mobil/register). Cierra todas las
-// sesiones (tokenVersion) y desvincula todos los dispositivos.
-app.post('/api/mobil/cambiar-password', async (req, res) => {
-  const { dip, passwordActual, passwordNueva } = req.body;
-  if (!dip || !passwordActual || !passwordNueva) {
-    return res.status(400).json({ error: 'DIP, contraseña actual y nueva son requeridas' });
-  }
-  const nueva = String(passwordNueva);
-  if (nueva.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-  if (!/[A-Za-z]/.test(nueva) || !/[0-9]/.test(nueva)) {
-    return res.status(400).json({ error: 'La contraseña debe incluir letras y números' });
-  }
-
-  try {
-    const cleanDip = normalizeDip(dip);
-    const registro = isDemoLogin(cleanDip, passwordActual)
-      ? await ensureDemoRegistration()
-      : await Registro.findOne({ dip: cleanDip });
-    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
-    if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'PlacetaID bloqueado o inactivo' });
-
-    const valid = await bcrypt.compare(String(passwordActual), registro.passwordHash);
-    if (!valid) return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
-
-    registro.passwordHash = await bcrypt.hash(nueva, 12);
-    registro.passwordDefaultCifrado = undefined;
-    registro.passwordChangedAt = new Date();
-    registro.tokenVersion = (registro.tokenVersion || 0) + 1;
-    await registro.save();
-
-    // Cierra todos los dispositivos vinculados (móvil y PCs).
-    await MobileDevice.updateMany({ dip: registro.dip }, { $set: { activo: false } });
-
-    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID App', evento: 'password_cambiada', ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo', metadatos: { sesionesCerradas: true, tokenVersion: registro.tokenVersion } });
-
-    res.json({
-      ok: true,
-      mensaje: 'Contraseña actualizada. Se han cerrado todas las sesiones y dispositivos: vuelve a iniciar sesión con tu DIP y la nueva contraseña.',
-      sesionesCerradas: true
-    });
-  } catch (err) {
-    console.error('Error cambiar password app:', err);
-    res.status(500).json({ error: 'Error al cambiar la contraseña' });
   }
 });
 
