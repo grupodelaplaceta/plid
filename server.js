@@ -2223,6 +2223,24 @@ app.get('/favicon.ico', (req, res) => {
 // Almacén en memoria para votaciones y notificaciones
 // (En producción debería usar MongoDB)
 const memVotaciones = new Map();
+
+// Opciones de voto de una votación. Si no tiene opciones personalizadas,
+// se usan las 3 clásicas (a favor / en contra / abstención).
+function opcionesDe(v) {
+  return Array.isArray(v.opciones) && v.opciones.length >= 2
+    ? v.opciones
+    : ['a_favor', 'en_contra', 'abstencion'];
+}
+
+// Resultado de una votación cerrada: opción ganadora (opciones personalizadas)
+// o Aprobada/Rechazada (opciones clásicas).
+function resultadoDe(v) {
+  if (Array.isArray(v.opciones) && v.resultados) {
+    const ops = opcionesDe(v);
+    return ops.reduce((a, b) => (v.resultados[b] || 0) > (v.resultados[a] || 0) ? b : a, ops[0]);
+  }
+  return (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
+}
 let memNotifIdCounter = 0;
 const memNotificaciones = [];
 
@@ -2320,6 +2338,12 @@ app.post('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
     if (!id || !titulo) return res.status(400).json({ error: 'id y titulo requeridos' });
     const dipGrupo = await getDIPsPorGrupo(grupo || 'Publico_General');
 
+    // Opciones de respuesta personalizadas (opcional; si no, las 3 clásicas).
+    const opciones = Array.isArray(req.body.opciones) && req.body.opciones.length >= 2
+      ? req.body.opciones.map(String)
+      : ['a_favor', 'en_contra', 'abstencion'];
+    const resultados = Object.fromEntries(opciones.map((o) => [o, 0]));
+
     // Calcular fecha límite por defecto (7 días)
     let fechaLim = fechaLimite;
     if (!fechaLim) {
@@ -2335,6 +2359,7 @@ app.post('/api/admin/votaciones', verifyAdminApiKey, async (req, res) => {
       aFavor: aFavor || 0, enContra: enContra || 0, abstenciones: abstenciones || 0,
       totalVotos: (aFavor || 0) + (enContra || 0) + (abstenciones || 0),
       totalEmitidos: 0,
+      opciones, resultados,
       estado: estado || 'Activa', resultado: resultado || null,
       reunionId: reunionId || null, requiereQuorum: requiereQuorum !== undefined ? requiereQuorum : true,
       fechaCreacion: new Date().toISOString(), fechaLimite: fechaLim,
@@ -2375,7 +2400,7 @@ app.put('/api/admin/votaciones/:id/cerrar', verifyAdminApiKey, async (req, res) 
   const v = memVotaciones.get(req.params.id);
   if (!v) return res.status(404).json({ error: 'No encontrada' });
   v.estado = 'Cerrada';
-  v.resultado = (v.aFavor || 0) > (v.enContra || 0) ? 'Aprobada' : 'Rechazada';
+  v.resultado = resultadoDe(v);
   // Notificar resultado
   for (const d of v.destinatarios || []) {
     pushNotificacion({
@@ -2666,8 +2691,9 @@ app.post('/api/mobil/votaciones/ejercer', async (req, res) => {
     if (!v) return res.status(404).json({ error: 'Votación no encontrada' });
     if (v.estado !== 'Activa') return res.status(400).json({ error: 'Esta votación ya está cerrada' });
     if (!dip) return res.status(400).json({ error: 'DIP requerido' });
-    if (!voto || !['a_favor', 'en_contra', 'abstencion'].includes(voto)) {
-      return res.status(400).json({ error: 'Voto inválido. Usar: a_favor, en_contra, abstencion' });
+    const opcionesValidas = opcionesDe(v);
+    if (!voto || !opcionesValidas.includes(voto)) {
+      return res.status(400).json({ error: `Voto inválido. Opciones válidas: ${opcionesValidas.join(', ')}` });
     }
 
     // Verificar fecha límite
@@ -2713,7 +2739,9 @@ app.post('/api/mobil/votaciones/ejercer', async (req, res) => {
     if (voto === 'a_favor') v.aFavor = (v.aFavor || 0) + 1;
     else if (voto === 'en_contra') v.enContra = (v.enContra || 0) + 1;
     else if (voto === 'abstencion') v.abstenciones = (v.abstenciones || 0) + 1;
-    v.totalVotos = (v.aFavor || 0) + (v.enContra || 0) + (v.abstenciones || 0);
+    if (!v.resultados) v.resultados = {};
+    v.resultados[voto] = (v.resultados[voto] || 0) + 1;
+    v.totalVotos = (v.totalVotos || 0) + 1;
     v.totalEmitidos = [...memRegistroVotos.values()].filter(r => r.votacionId === idVotacion).length;
 
     // Registrar en RSP (no bloqueante)
@@ -2723,7 +2751,7 @@ app.post('/api/mobil/votaciones/ejercer', async (req, res) => {
       success: true,
       message: 'Voto registrado oficialmente',
       registro: { id: regId, hash, timestamp, oficial: true },
-      votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos }
+      votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos, resultados: v.resultados }
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2741,8 +2769,9 @@ app.post('/api/mobil/votaciones/:id/ejercer', async (req, res) => {
     if (!v) return res.status(404).json({ error: 'Votación no encontrada' });
     if (v.estado !== 'Activa') return res.status(400).json({ error: 'Esta votación ya está cerrada' });
     if (!dip) return res.status(400).json({ error: 'DIP requerido' });
-    if (!voto || !['a_favor', 'en_contra', 'abstencion'].includes(voto)) {
-      return res.status(400).json({ error: 'Voto inválido. Usar: a_favor, en_contra, abstencion' });
+    const opcionesValidas = opcionesDe(v);
+    if (!voto || !opcionesValidas.includes(voto)) {
+      return res.status(400).json({ error: `Voto inválido. Opciones válidas: ${opcionesValidas.join(', ')}` });
     }
     if (v.fechaLimite) {
       const tiempo = calcularTiempoRestante(v.fechaLimite);
@@ -2774,11 +2803,13 @@ app.post('/api/mobil/votaciones/:id/ejercer', async (req, res) => {
     if (voto === 'a_favor') v.aFavor = (v.aFavor || 0) + 1;
     else if (voto === 'en_contra') v.enContra = (v.enContra || 0) + 1;
     else if (voto === 'abstencion') v.abstenciones = (v.abstenciones || 0) + 1;
-    v.totalVotos = (v.aFavor || 0) + (v.enContra || 0) + (v.abstenciones || 0);
+    if (!v.resultados) v.resultados = {};
+    v.resultados[voto] = (v.resultados[voto] || 0) + 1;
+    v.totalVotos = (v.totalVotos || 0) + 1;
     v.totalEmitidos = [...memRegistroVotos.values()].filter(r => r.votacionId === idVotacion).length;
     // Registrar en RSP (no bloqueante)
     rspRegistrarPlaceta(v.categoria || 'votaciones', 'modificacion', `POST /mobil/votaciones/${idVotacion}/ejercer`, dip);
-    res.json({ success: true, message: 'Voto registrado oficialmente', registro: { id: regId, hash, timestamp, oficial: true }, votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos } });
+    res.json({ success: true, message: 'Voto registrado oficialmente', registro: { id: regId, hash, timestamp, oficial: true }, votacion: { id: idVotacion, aFavor: v.aFavor, enContra: v.enContra, abstenciones: v.abstenciones, totalVotos: v.totalVotos, resultados: v.resultados } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2797,6 +2828,7 @@ app.get('/api/mobil/votaciones/historial/:dip', async (req, res) => {
         fechaCreacion: v.creadoEn || v.fechaCreacion, fechaLimite: v.fechaLimite,
         reunionId: v.reunionId, aFavor: v.aFavor, enContra: v.enContra,
         abstenciones: v.abstenciones, totalVotos: v.totalVotos, totalEmitidos: v.totalEmitidos,
+        opciones: v.opciones || null, resultados: v.resultados || null,
         miVoto: miVoto ? { voto: miVoto.voto, timestamp: miVoto.timestamp, hash: miVoto.hash, oficial: miVoto.oficial } : null,
         esAnonimo,
         votos: esAnonimo ? [] : misVotos.map(r => ({
