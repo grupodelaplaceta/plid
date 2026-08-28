@@ -2173,6 +2173,11 @@ app.get('/api/mobil/poll/:requestId', async (req, res) => {
     // Still pending
     res.json({ ok: true, autorizado: false, estado: 'pending' });
   } catch (err) {
+    // Un identificador inexistente no es un fallo interno del servidor.
+    // La app cliente puede tratarlo como solicitud caducada/no disponible.
+    if (err?.name === 'CastError' || err?.name === 'BSONTypeError') {
+      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    }
     res.status(500).json({ error: 'Error al consultar solicitud' });
   }
 });
