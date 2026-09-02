@@ -857,6 +857,16 @@ app.post('/api/auth/fase1', async (req, res) => {
 
     if (!registro.activo) return res.status(403).json({ error: 'Registro inactivo' });
 
+    // Primer acceso (registros importados sin contraseña): no puede haber una
+    // contraseña "correcta" todavía. Se indica cómo fijarla en vez de contarlo
+    // como intento fallido (evita bloquear a quien nunca ha entrado).
+    if (!registro.passwordHash) {
+      return res.status(401).json({
+        error: 'Este PlacetaID aún no tiene contraseña. Fíjala al vincular tu dispositivo desde la app, o pide que la establezcan desde RSP (Administrar PlacetaID).',
+        primerAcceso: true
+      });
+    }
+
     const valid = await bcrypt.compare(password, registro.passwordHash);
 
     if (!valid) {
@@ -1939,8 +1949,29 @@ app.post('/api/mobil/register', async (req, res) => {
     const registro = isDemoLogin(cleanDip, password)
       ? await ensureDemoRegistration()
       : await Registro.findOne({ dip: cleanDip });
-    if (!registro) return res.status(404).json({ error: 'PlacetaID no encontrado' });
+    if (!registro) {
+      return res.status(404).json({ error: 'PlacetaID no encontrado para este DIP. Solicita el alta en la Junta o revisa el DIP.' });
+    }
     if (registro.bloqueado || !registro.activo) return res.status(403).json({ error: 'PlacetaID bloqueado o inactivo' });
+
+    // ── PRIMER ACCESO (gente que nunca ha entrado) ─────────────────────────
+    // Hay registros importados/creados por el RSP SIN contraseña aún. Para esas
+    // personas, la contraseña que escriben en este paso de "vincular dispositivo"
+    // es la que eligen/confirman como suya: se guarda cifrada y pueden entrar.
+    if (!registro.passwordHash) {
+      const passwordHash = await bcrypt.hash(password, 12);
+      registro.passwordHash = passwordHash;
+      registro.passwordChangedAt = new Date();
+      registro.bloqueado = false;
+      registro.intentosFallidos = 0;
+      await registro.save();
+      try { await registrarLog({
+        dip: cleanDip, registroId: registro._id,
+        servicio: 'PlacetaID', evento: 'primer_acceso_password_creado',
+        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
+        metadatos: { accion: 'registro_dispositivo', resultado: 'primer_acceso' }
+      }); } catch (_) {}
+    }
 
     // Verify password
     const passwordValid = await bcrypt.compare(password, registro.passwordHash);
@@ -1951,7 +1982,7 @@ app.post('/api/mobil/register', async (req, res) => {
         ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
         metadatos: { accion: 'registro_dispositivo', resultado: 'password_incorrecta' }
       }); } catch (_) {}
-      return res.status(401).json({ error: 'Contraseña incorrecta' });
+      return res.status(401).json({ error: 'Contraseña incorrecta. Si nunca la has usado, fíjala desde RSP (Administrar PlacetaID → Fijar contraseña) o pide que la restablezcan.' });
     }
 
     const tipo = platform === 'pc' || platform === 'windows' || platform === 'mac' || platform === 'linux' ? 'pc' : 'movil';
