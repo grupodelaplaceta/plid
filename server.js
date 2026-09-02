@@ -1956,86 +1956,61 @@ app.post('/api/mobil/register', async (req, res) => {
 
     const tipo = platform === 'pc' || platform === 'windows' || platform === 'mac' || platform === 'linux' ? 'pc' : 'movil';
 
-    // El registro del mismo dispositivo debe ser idempotente. Si se comprueba
-    // el límite antes de actualizarlo, el segundo intento siempre da 409.
-    const existing = await MobileDevice.findOne({ dip: cleanDip });
-    if (existing && existing.deviceId === devId) {
-      existing.deviceName = deviceName || existing.deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
-      existing.platform = platform || existing.platform || (tipo === 'pc' ? 'windows' : 'android');
-      existing.tipo = tipo;
-      existing.activo = true;
-      existing.ultimoAcceso = new Date();
-      await existing.save();
+    // ── Vincular dispositivo (móvil o PC) ─────────────────────────────────
+    // El mismo dispositivo es idempotente (se actualiza, nunca 409 por repetir).
+    const mismo = await MobileDevice.findOne({ dip: cleanDip, deviceId: devId });
+    if (mismo) {
+      mismo.deviceName = deviceName || mismo.deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
+      mismo.platform = platform || mismo.platform || (tipo === 'pc' ? 'windows' : 'android');
+      mismo.tipo = tipo;
+      mismo.activo = true;
+      mismo.ultimoAcceso = new Date();
+      await mismo.save();
       return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado` });
     }
 
-    // Si se desinstaló/reinstaló la app, el móvil pierde su identificador
-    // local. La contraseña ya se ha verificado arriba, así que se puede
-    // recuperar el vínculo sustituyendo el identificador antiguo.
-    if (existing && existing.tipo === 'movil' && tipo === 'movil') {
-      existing.deviceId = devId;
-      existing.deviceName = deviceName || 'Dispositivo móvil';
-      existing.platform = platform || 'android';
-      existing.activo = true;
-      existing.ultimoAcceso = new Date();
-      await existing.save();
-      try { await registrarLog({
+    if (tipo === 'movil') {
+      // Un ciudadano usa UN móvil. Si ya se verificó su contraseña, vincular
+      // un móvil nuevo (reinstalación, cambio de teléfono o recuperación)
+      // SUSTITUYE cualquier móvil anterior de este DIP: nunca un 409.
+      await MobileDevice.deleteMany({ dip: cleanDip, tipo: 'movil' });
+      await MobileDevice.create({
+        dip: cleanDip,
+        deviceId: devId,
+        deviceName: deviceName || 'Dispositivo móvil',
+        platform: platform || 'android',
+        tipo,
+        activo: true
+      });
+      await registrarLog({
         dip: cleanDip, registroId: registro._id,
         servicio: 'PlacetaID', evento: 'intento_exitoso',
         ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
-        metadatos: { accion: 'recuperacion_dispositivo', resultado: 'reemplazado', tipo }
-      }); } catch (_) {}
-      return res.json({ ok: true, mensaje: 'Dispositivo anterior sustituido correctamente' });
+        metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo_movil_reemplaza', tipo }
+      });
+      return res.json({ ok: true, mensaje: 'Móvil vinculado correctamente' });
     }
 
-    // Limitar a 3 PCs o 1 móvil por DIP
-    const dispositivos = await MobileDevice.find({ dip: cleanDip, activo: true });
-    const pcCount = dispositivos.filter(d => d.tipo === 'pc').length;
-    const movilCount = dispositivos.filter(d => d.tipo === 'movil').length;
-
-    if (tipo === 'pc' && pcCount >= 3) {
+    // PC: máximo 3 por DIP (el mismo deviceId ya se actualizó arriba).
+    const pcCount = await MobileDevice.countDocuments({ dip: cleanDip, tipo: 'pc', activo: true });
+    if (pcCount >= 3) {
       return res.status(409).json({ error: 'Límite de 3 PCs alcanzado. Desvincula uno primero.' });
     }
-    if (tipo === 'movil' && movilCount >= 1) {
-      return res.status(409).json({ error: 'Ya tienes un móvil vinculado. Desvincula el anterior primero.' });
-    }
-
-    // Buscar cualquier dispositivo de este DIP (actualizarlo, no crear duplicado)
-    if (existing) {
-      existing.deviceId = devId;
-      existing.deviceName = deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
-      existing.platform = platform || (tipo === 'pc' ? 'windows' : 'android');
-      existing.tipo = tipo;
-      existing.activo = true;
-      existing.ultimoAcceso = new Date();
-      await existing.save();
-      try { await registrarLog({
-        dip: cleanDip, registroId: registro._id,
-        servicio: 'PlacetaID', evento: 'intento_exitoso',
-        ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
-        metadatos: { accion: 'registro_dispositivo', resultado: 'actualizado', tipo }
-      }); } catch (_) {}
-      return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado` });
-    }
-
     await MobileDevice.create({
       dip: cleanDip,
       deviceId: devId,
-      deviceName: deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil'),
-      platform: platform || (tipo === 'pc' ? 'windows' : 'android'),
+      deviceName: deviceName || 'PC',
+      platform: platform || 'windows',
       tipo,
       activo: true
     });
-
     await registrarLog({
       dip: cleanDip, registroId: registro._id,
       servicio: 'PlacetaID', evento: 'intento_exitoso',
       ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
-      metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo', tipo }
+      metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo_pc', tipo }
     });
-
-    console.log(`💻 ${tipo === 'pc' ? 'PC' : 'Móvil'} registrado para ${cleanDip}`);
-    res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} registrado correctamente` });
+    res.json({ ok: true, mensaje: 'PC vinculado correctamente' });
   } catch (err) {
     console.error('Error register device:', err);
     res.status(500).json({ error: 'Error al registrar dispositivo' });
