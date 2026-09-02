@@ -1991,6 +1991,9 @@ app.post('/api/mobil/register', async (req, res) => {
     // El mismo dispositivo es idempotente (se actualiza, nunca 409 por repetir).
     const mismo = await MobileDevice.findOne({ dip: cleanDip, deviceId: devId });
     if (mismo) {
+      // OJO: la colección tiene un índice UNIQUE legacy sobre deviceToken; se
+      // guarda siempre un valor real (nunca null) para no chocar con él.
+      mismo.deviceToken = devId;
       mismo.deviceName = deviceName || mismo.deviceName || (tipo === 'pc' ? 'PC' : 'Dispositivo móvil');
       mismo.platform = platform || mismo.platform || (tipo === 'pc' ? 'windows' : 'android');
       mismo.tipo = tipo;
@@ -2008,6 +2011,7 @@ app.post('/api/mobil/register', async (req, res) => {
       await MobileDevice.create({
         dip: cleanDip,
         deviceId: devId,
+        deviceToken: devId,
         deviceName: deviceName || 'Dispositivo móvil',
         platform: platform || 'android',
         tipo,
@@ -2030,6 +2034,7 @@ app.post('/api/mobil/register', async (req, res) => {
     await MobileDevice.create({
       dip: cleanDip,
       deviceId: devId,
+      deviceToken: devId,
       deviceName: deviceName || 'PC',
       platform: platform || 'windows',
       tipo,

@@ -251,6 +251,10 @@ const mobileDeviceSchema = new mongoose.Schema({
     required: false,
     trim: true
   },
+  deviceToken: {
+    type: String,
+    trim: true
+  },
   deviceName: {
     type: String,
     trim: true,
