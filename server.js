@@ -2044,7 +2044,7 @@ app.post('/api/mobil/register', async (req, res) => {
     res.json({ ok: true, mensaje: 'PC vinculado correctamente' });
   } catch (err) {
     console.error('Error register device:', err);
-    res.status(500).json({ error: 'Error al registrar dispositivo' });
+    res.status(500).json({ error: 'Error al registrar dispositivo', detalle: String((err && err.message) || err) });
   }
 });
 
