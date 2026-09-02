@@ -876,14 +876,20 @@ app.post('/api/auth/fase1', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales incorrectas', intentosRestantes: 3 - intentos });
     }
 
-    if (registro.twoFactorDisabled) {
+    // El 2FA solo se EXIGE cuando está configurado Y verificado. Si la cuenta aún
+    // no ha verificado su autenticador (totpVerified=false) no puede generar un
+    // código: exigirlo bloquearía el acceso a pesar de tener la contraseña
+    // correcta (caso real de usuarios que nunca escanearon el QR). En ese caso
+    // se completa el login con la contraseña y se le animará a configurar 2FA.
+    const requiere2FA = !registro.twoFactorDisabled && registro.totpVerified === true && !!registro.totpSecret;
+    if (!requiere2FA) {
       const loginPayload = {
         servicio: solicitante?.nombre || svc,
         servicioUrl,
         platform: platform || solicitante?.plataforma || 'web',
         state: oauthState || null
       };
-      return res.json(await completeLogin(registro, loginPayload, req, 'completa_sin_2fa'));
+      return res.json(await completeLogin(registro, loginPayload, req, registro.twoFactorDisabled ? 'completa_sin_2fa' : 'completa_sin_2fa_no_verificado'));
     }
 
     // Fase 1 OK — emitir token temporal para fase 2
@@ -945,6 +951,12 @@ app.post('/api/auth/fase2', async (req, res) => {
 
     if (registro.bloqueado) {
       return res.status(403).json({ error: 'Cuenta bloqueada. Contacta con la Junta.', bloqueado: true });
+    }
+
+    // Defensivo: si el 2FA no está verificado/configurado, no hay ningún código
+    // que validar (nunca debería llegarse aquí tras el fix de fase 1).
+    if (!registro.totpVerified || !registro.totpSecret) {
+      return res.json(await completeLogin(registro, payload, req));
     }
 
     const verified = speakeasy.totp.verify({
