@@ -1427,6 +1427,57 @@ app.post('/api/admin/ban', verifyAdminApiKey, requireAdmin, async (req, res) => 
   }
 });
 
+// ── Restablecer contraseña (RSP / Admin) ─────────────────────────────────────
+// Lo usa la pantalla «Administrar PlacetaID» del RSP (Fijar contraseña):
+// el RSP reenvía { dip, passwordNueva } con X-API-Key. Aquí se aplica el
+// hash bcrypt y se guarda en el MISMO registro que valida el login
+// (/api/auth/fase1). Se desbloquea la cuenta, se resetean intentos y se
+// invalidan tokens anteriores (tokenVersion++).
+app.post('/api/admin/cambiar-password', verifyAdminApiKey, requireAdmin, async (req, res) => {
+  try {
+    const dip = normalizeDip(req.body?.dip || '');
+    const supportNumber = String(req.body?.supportNumber || '').trim();
+    // Acepta passwordNueva (RSP) y también password/nuevaPassword por robustez.
+    const password = String(req.body?.passwordNueva || req.body?.password || req.body?.nuevaPassword || '');
+
+    if (!dip && !supportNumber) return res.status(400).json({ error: 'dip_o_supportNumber_requerido' });
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres, letras y números' });
+    }
+
+    const query = supportNumber && !dip ? { supportNumber } : { dip };
+    const registro = await Registro.findOne(query);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (!registro.activo) return res.status(403).json({ error: 'Registro inactivo' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    registro.passwordHash = passwordHash;
+    registro.intentosFallidos = 0;
+    registro.bloqueado = false;
+    registro.ultimoBloqueo = null;
+    registro.passwordChangedAt = new Date();
+    // La contraseña temporal cifrada del alta ya no es necesaria.
+    if (registro.passwordDefaultCifrado) registro.passwordDefaultCifrado = undefined;
+    registro.tokenVersion = (registro.tokenVersion || 0) + 1;
+    await registro.save();
+
+    await registrarLog({
+      dip: registro.dip || registro.supportNumber,
+      registroId: registro._id,
+      servicio: 'PlacetaID Admin',
+      evento: 'password_reset',
+      ip: getIP(req),
+      ua: req.headers['user-agent'],
+      metadatos: { cambiadaPor: req.user?.dip || 'api-key' }
+    });
+
+    res.json({ ok: true, dip: registro.dip || null, mensaje: 'Contraseña restablecida correctamente' });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Error al cambiar la contraseña' });
+  }
+});
+
 // ── API: PANEL JUNTA (ADMIN) ──────────────────────────────────────────────────
 
 // Login de admin (misma pasarela pero devuelve token admin)
