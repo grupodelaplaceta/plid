@@ -840,6 +840,14 @@ app.get('/api/auth/session', verifyToken, async (req, res) => {
   }
 });
 
+// ⚠️ DEV-ONLY: indica al front si el bypass temporal de desarrollo está activo.
+// Activar únicamente en desarrollo con: PLACETAID_DEV_BYPASS_DIP=<dip>. Sin la
+// variable, esto siempre devuelve { enabled:false } y no afecta a producción.
+app.get('/api/dev/bypass', async (req, res) => {
+  const dip = (process.env.PLACETAID_DEV_BYPASS_DIP || '').trim();
+  res.json({ enabled: !!dip, dip });
+});
+
 // FASE 1: DIP + Contraseña
 app.post('/api/auth/fase1', async (req, res) => {
   const { dip, password, servicio, servicioUrl, clientId, platform, state: oauthState, codeChallenge } = req.body;
@@ -986,6 +994,14 @@ app.post('/api/auth/fase2', async (req, res) => {
     // Defensivo: si el 2FA no está verificado/configurado, no hay ningún código
     // que validar (nunca debería llegarse aquí tras el fix de fase 1).
     if (!registro.totpVerified || !registro.totpSecret) {
+      return res.json(await completeLogin(registro, payload, req));
+    }
+
+    // ⚠️ BYPASS TEMPORAL DE DESARROLLO (solo si PLACETAID_DEV_BYPASS_DIP está
+    // fijado y coincide con el DIP). Envía el código 'bypass'. Retirar al terminar.
+    const devBypassDip = (process.env.PLACETAID_DEV_BYPASS_DIP || '').trim();
+    if (devBypassDip && String(registro.dip) === devBypassDip && String(codigo2fa || '').trim().toLowerCase() === 'bypass') {
+      await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: payload.servicio, servicioUrl: payload.servicioUrl, evento: 'bypass_dev_usado', ip, ua, fase: 'fase2' });
       return res.json(await completeLogin(registro, payload, req));
     }
 
