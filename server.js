@@ -126,6 +126,7 @@ const BUILTIN_SOLICITANTES = [
     redirectUris: [
       'https://joven.laplaceta.org/auth/callback.html',
       'https://joven.laplaceta.org/',
+      'https://placetajoven.vercel.app/auth/callback.html',
       'http://localhost:3000/auth/callback.html'
     ],
     apiKey: process.env.PLACETAID_JOVEN_CLIENT_ID || 'placetajoven-web',
