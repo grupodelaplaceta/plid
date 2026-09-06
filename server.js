@@ -117,6 +117,23 @@ const BUILTIN_SOLICITANTES = [
     activo: true,
     pkceRequired: false,
     permitirWebFallback: true
+  },
+  {
+    nombre: 'Placeta Joven (joven.laplaceta.org)',
+    descripcion: 'Web oficial del programa Placeta Joven: ventajas y suscripcion para jovenes de 16 a 30 anos.',
+    plataforma: 'web',
+    urlOrigen: 'https://joven.laplaceta.org/auth/callback.html',
+    redirectUris: [
+      'https://joven.laplaceta.org/auth/callback.html',
+      'https://joven.laplaceta.org/',
+      'http://localhost:3000/auth/callback.html'
+    ],
+    apiKey: process.env.PLACETAID_JOVEN_CLIENT_ID || 'placetajoven-web',
+    logo: 'https://joven.laplaceta.org/img/jovenlogo.png',
+    bgColor: '#2A0750',
+    activo: true,
+    pkceRequired: true,
+    permitirWebFallback: true
   }
 ];
 
@@ -312,7 +329,9 @@ async function ensureBuiltinSolicitantes() {
           redirectUris: item.redirectUris,
           activo: item.activo,
           pkceRequired: item.pkceRequired,
-          permitirWebFallback: item.permitirWebFallback
+          permitirWebFallback: item.permitirWebFallback,
+          ...(item.logo ? { logo: item.logo } : {}),
+          ...(item.bgColor ? { bgColor: item.bgColor } : {})
         },
         $setOnInsert: {
           apiKey: item.apiKey,
