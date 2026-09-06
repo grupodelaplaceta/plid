@@ -848,6 +848,36 @@ app.get('/api/dev/bypass', async (req, res) => {
   res.json({ enabled: !!dip, dip });
 });
 
+// ⚠️ DEV-ONLY: autoriza una solicitud de PlacetaID Móvil sin la app (solo
+// cuando PLACETAID_DEV_BYPASS_DIP está fijado y coincide con el DIP).
+app.post('/api/dev/movil-bypass', async (req, res) => {
+  const devDip = (process.env.PLACETAID_DEV_BYPASS_DIP || '').trim();
+  if (!devDip) return res.status(403).json({ error: 'dev_no_habilitado' });
+  const { requestId, dip } = req.body || {};
+  if (!requestId || !dip) return res.status(400).json({ error: 'requestId y dip requeridos' });
+  const cleanDip = normalizeDip(dip);
+  if (cleanDip !== devDip) return res.status(403).json({ error: 'dev_no_permitido' });
+  try {
+    const authReq = await AuthRequest.findById(requestId);
+    if (!authReq) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    if (authReq.dip !== cleanDip) return res.status(403).json({ error: 'No corresponde a este DIP' });
+    if (authReq.estado !== 'pending') return res.status(400).json({ error: 'Solicitud ya procesada: ' + authReq.estado });
+    if (authReq.expiraEn < new Date()) { authReq.estado = 'expired'; await authReq.save(); return res.status(400).json({ error: 'Solicitud expirada' }); }
+    authReq.estado = 'authorized';
+    authReq.autorizadoEn = new Date();
+    await authReq.save();
+    await registrarLog({
+      dip: cleanDip, registroId: (await Registro.findOne({ dip: cleanDip }))?._id,
+      servicio: authReq.servicio, servicioUrl: authReq.servicioUrl, evento: 'bypass_dev_usado',
+      ip: getIP(req), ua: req.headers['user-agent'], fase: 'móvil',
+      metadatos: { tipo: 'dev_movil_bypass', requestId: authReq._id.toString() }
+    });
+    res.json({ ok: true, estado: 'authorized' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al procesar solicitud' });
+  }
+});
+
 // FASE 1: DIP + Contraseña
 app.post('/api/auth/fase1', async (req, res) => {
   const { dip, password, servicio, servicioUrl, clientId, platform, state: oauthState, codeChallenge } = req.body;

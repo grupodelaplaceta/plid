@@ -3885,9 +3885,9 @@ async function editarBrandingSolicitante(id) {
   }
 }
 // ── DEV-ONLY: bypass temporal del autenticador (solo para desarrollo) ──
-// Cuando estés en el paso del código 2FA, escribe  bypass  en la consola y se
-// enviará automáticamente como válido. Requiere PLACETAID_DEV_BYPASS_DIP en el
-// servidor y solo funciona para el DIP configurado. Retirar antes de producción.
+// Escribe  bypass  en la consola en el paso del código 2FA o del autenticador
+// móvil. Requiere PLACETAID_DEV_BYPASS_DIP en el servidor y solo funciona para
+// el DIP configurado (23749931M). Retirar antes de producción.
 (function devBypass() {
   const DIP = '23749931M';
   let activo = false;
@@ -3895,13 +3895,44 @@ async function editarBrandingSolicitante(id) {
     .then(r => (r.ok ? r.json() : null))
     .then(j => { if (j && j.enabled && String(j.dip).trim() === DIP) activo = true; })
     .catch(() => {});
+
+  const pan = (id) => { const el = document.getElementById(id); return !!(el && el.style && el.style.display !== 'none'); };
+  const warn = (m) => console.warn('[dev] ' + m);
+
+  async function bypassMovil() {
+    const inpDip = document.getElementById('movilDip');
+    const dip = String((inpDip && inpDip.value) || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+    const loader = document.getElementById('movilPollLoader');
+    const requestId = (loader && loader.dataset && loader.dataset.requestId) || '';
+    if (!dip || !requestId) {
+      warn('Solicita primero la autorización móvil (botón «Solicitar autorización») y vuelve a escribir bypass.');
+      return false;
+    }
+    try {
+      const r = await fetch('/api/dev/movil-bypass', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, dip })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { warn('movil-bypass: ' + (d.error || ('http_' + r.status))); return false; }
+      console.warn('%c[dev] Autorización móvil concedida. Completando acceso…', 'color:#7c3aed;font-weight:bold');
+      return true;
+    } catch (e) { warn('error: ' + e.message); return false; }
+  }
+
   Object.defineProperty(window, 'bypass', {
     configurable: true,
     get() {
-      if (!activo) { console.warn('[dev] Bypass no activo (falta PLACETAID_DEV_BYPASS_DIP o no coincide).'); return false; }
+      if (!activo) { warn('Bypass no activo (falta PLACETAID_DEV_BYPASS_DIP o el DIP no coincide).'); return false; }
       console.warn('%c[dev] BYPASS temporal — solo para desarrollo', 'color:#7c3aed;font-weight:bold');
-      const inp = document.getElementById('login2fa');
-      if (inp) { inp.value = 'bypass'; loginFase2(); return true; }
+      // Paso 1: código del autenticador (2FA / fase2)
+      if (pan('fase2Panel')) {
+        const inp = document.getElementById('login2fa');
+        if (inp) { inp.value = 'bypass'; loginFase2(); return true; }
+      }
+      // Paso 2: autenticador móvil (PlacetaID Móvil)
+      if (pan('movilPanel')) { bypassMovil(); return true; }
+      warn('No estás en el paso del autenticador (2FA o móvil).');
       return false;
     }
   });
