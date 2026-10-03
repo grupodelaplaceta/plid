@@ -33,8 +33,8 @@ const { Registro, Log, Solicitante, MigracionPendiente, MobileDevice, AuthReques
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://malegre_db_user:gKHctbCg9KcYUrO8@cluster0.m5bntoj.mongodb.net/';
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const MONGO_URI = process.env.MONGO_URI;
+const JWT_SECRET = process.env.JWT_SECRET || '';
 const JWT_EXPIRY = '5d'; // Tokens de 5 días según requerimiento
 const MIGRATION_IMPORT_KEY = process.env.PLACETAID_MIGRATION_KEY || '';
 const ADMIN_DESKTOP_CLIENT_ID = process.env.PLACETAID_ADMIN_DESKTOP_CLIENT_ID || 'administracion-gdlp';
@@ -50,6 +50,10 @@ const BUILTIN_PENDING_MIGRATIONS = [
 ];
 const DESKTOP_CLIENT_ID = 'placetaid-desktop';
 const DESKTOP_CALLBACK = 'placetaid-desktop://auth';
+
+if (!MONGO_URI || !JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error('PlacetaID requiere MONGO_URI y JWT_SECRET (mínimo 32 caracteres) configurados en el entorno.');
+}
 
 const BUILTIN_SOLICITANTES = [
   {
@@ -97,9 +101,11 @@ const BUILTIN_SOLICITANTES = [
     urlOrigen: 'https://banco.laplaceta.org/',
     redirectUris: [
       'https://banco.laplaceta.org/',
+      'https://banco.laplaceta.org/auth/callback',
+      'https://banco.laplaceta.org/placetaid/callback',
       'http://localhost:3000/'
     ],
-    apiKey: process.env.PLACETAID_BANCO_CLIENT_ID || 'banco-web',
+    apiKey: process.env.PLACETAID_BANCO_CLIENT_ID || '79d7087aa027fac0250e832c4b5d39b2',
     activo: true,
     pkceRequired: false,
     permitirWebFallback: true
@@ -167,6 +173,8 @@ const authLimiter = rateLimit({
   keyGenerator: getClientIP
 });
 app.use('/api/auth/', authLimiter);
+const registrationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'registro_temporalmente_limitado' } });
+app.use('/api/registro', registrationLimiter);
 
 // ── MONGODB ───────────────────────────────────────────────────────────────────
 let isConnected = false;
@@ -728,6 +736,11 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     error.statusCode = 400;
     throw error;
   }
+  if (context.requireLegalConsent && (!payload.aceptaAvisoLegal || !payload.aceptaPrivacidad)) {
+    const error = new Error('Debes aceptar el Aviso Legal y la Política de Privacidad vigentes para continuar.');
+    error.statusCode = 400;
+    throw error;
+  }
   if (cleanCorreo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanCorreo)) {
     const error = new Error('Correo inválido');
     error.statusCode = 400;
@@ -743,6 +756,19 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     const error = new Error('Apellidos y fecha de nacimiento son requeridos para registros personales');
     error.statusCode = 400;
     throw error;
+  }
+  if (cleanRol !== 'empresa') {
+    const birthDate = new Date(fechaNacimiento);
+    if (Number.isNaN(birthDate.getTime()) || birthDate > new Date()) {
+      const error = new Error('La fecha de nacimiento no es válida.'); error.statusCode = 400; throw error;
+    }
+    let age = new Date().getFullYear() - birthDate.getFullYear();
+    const monthDelta = new Date().getMonth() - birthDate.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && new Date().getDate() < birthDate.getDate())) age--;
+    if (age < 16) {
+      const error = new Error('ALTA_JUNIOR: Si tienes menos de 16 años, tu madre, padre o tutor debe descargar PlacetaID Móvil y tú debes usar Placeta Junior para que puedan solicitar tu alta.');
+      error.statusCode = 403; throw error;
+    }
   }
   if (!pendingMigration) validateDipForName(cleanDip, nombre);
 
@@ -765,6 +791,11 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     passwordHash,
     totpSecret: totp.base32,
     totpVerified: false,
+    activo: false,
+    legalConsents: context.requireLegalConsent ? [
+      { document: 'aviso-legal', version: process.env.PLACETAID_LEGAL_VERSION || '2026-10', acceptedAt: new Date() },
+      { document: 'privacidad', version: process.env.PLACETAID_PRIVACY_VERSION || '2026-10', acceptedAt: new Date() }
+    ] : [],
     supportNumber
   };
 
@@ -818,9 +849,9 @@ async function createPlacetaIdRegistration(payload, context = {}) {
     nombre: registro.nombre,
     apellidos: registro.apellidos,
     nombreCompleto: registro.rol === 'empresa' ? registro.empresaNombre : `${registro.nombre} ${registro.apellidos}`.trim(),
+    registroId: registro._id.toString(),
     rol: registro.rol,
     migradoDesdePendiente: Boolean(registro.migradoDesdePendiente),
-    totpSecret: totp.base32,
     qrCode: qrUrl,
     otpauthUrl,
     mensaje: 'Registro creado. Escanea el QR con tu autenticador y verifica el primer código.'
@@ -888,15 +919,11 @@ app.post('/api/auth/fase1', async (req, res) => {
   const svc = servicio || 'Desconocido';
 
   try {
-    let solicitante = null;
-    if (clientId) {
-      solicitante = await findActiveSolicitante(clientId);
-      if (!solicitante) return res.status(401).json({ error: 'Aplicación solicitante no autorizada' });
-      const callbacks = normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris);
-      if (servicioUrl && !isAllowedCallback(servicioUrl, callbacks)) {
-        return res.status(400).json({ error: 'Callback no autorizado para esta aplicación' });
-      }
-    }
+    if (!clientId || !servicioUrl || !/^https:\/\//i.test(servicioUrl)) return res.status(400).json({ error: 'gateway_params_required', message: 'Inicia sesión desde la aplicación o web que solicita acceso.' });
+    const solicitante = await findActiveSolicitante(clientId);
+    if (!solicitante) return res.status(401).json({ error: 'Aplicación solicitante no autorizada' });
+    const callbacks = normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris);
+    if (!isAllowedCallback(servicioUrl, callbacks)) return res.status(400).json({ error: 'Callback no autorizado para esta aplicación' });
 
     const cleanDip = normalizeDip(dip);
     const registro = isDemoLogin(cleanDip, password)
@@ -1159,17 +1186,26 @@ app.post('/api/registro/completar-con-token', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Error al completar registro' }); }
 });
 
-app.post('/api/registro', async (req, res) => {
+app.post('/api/registro', registrationLimiter, async (req, res) => {
   try {
+    const clientId = String(req.body?.clientId || '').trim();
+    const redirectUri = String(req.body?.redirectUri || '').trim();
+    if (!clientId || !redirectUri || !/^https:\/\//i.test(redirectUri)) return res.status(400).json({ error: 'gateway_params_required', message: 'El registro debe iniciarse desde la pasarela de una aplicación autorizada.' });
+    const solicitante = await findActiveSolicitante(clientId);
+    if (!solicitante || !isAllowedCallback(redirectUri, normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris))) return res.status(401).json({ error: 'solicitante_no_autorizado' });
     const result = await createPlacetaIdRegistration(req.body, {
-      servicio: 'PlacetaID',
+      servicio: solicitante.nombre,
+      servicioUrl: redirectUri,
       ip: getIP(req),
-      ua: req.headers['user-agent']
+      ua: req.headers['user-agent'],
+      requireLegalConsent: true
     });
-    res.status(201).json(result);
+    const registrationToken = jwt.sign({ tipo: 'alta_pendiente', registroId: result.registroId, clientId, redirectUri }, JWT_SECRET, { expiresIn: '15m' });
+    res.status(201).json({ ...result, registrationToken });
   } catch (err) {
     console.error(err);
-    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Error al crear el registro' });
+    const duplicate = err.code === 11000;
+    res.status(err.statusCode || (duplicate ? 409 : 500)).json({ error: duplicate ? 'El DNI ya tiene una identidad PlacetaID.' : err.message || 'Error al crear el registro' });
   }
 });
 
@@ -1311,7 +1347,8 @@ app.post('/api/registro/solicitante', async (req, res) => {
         solicitanteId: solicitante._id.toString(),
         plataforma: solicitante.plataforma,
         origen: req.body?.origen || 'api_solicitante'
-      }
+      },
+      requireLegalConsent: true
     });
     res.status(201).json({
       ...result,
@@ -1337,12 +1374,38 @@ app.post('/api/registro/verificar-totp', async (req, res) => {
     if (!ok) return res.status(400).json({ error: 'Código incorrecto. Comprueba tu autenticador.' });
 
     registro.totpVerified = true;
+    registro.activo = true;
     await registro.save();
     await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: 'PlacetaID', evento: 'totp_configurado', ip: getIP(req), ua: req.headers['user-agent'] });
 
     res.json({ ok: true, mensaje: 'Autenticador configurado correctamente. Ya puedes iniciar sesión.' });
   } catch (err) {
     res.status(500).json({ error: 'Error al verificar' });
+  }
+});
+
+app.post('/api/registro/confirmar-alta', registrationLimiter, async (req, res) => {
+  const { registrationToken, codigo } = req.body || {};
+  if (!registrationToken || !codigo) return res.status(400).json({ error: 'registro_y_codigo_requeridos' });
+  try {
+    const payload = jwt.verify(registrationToken, JWT_SECRET);
+    if (payload.tipo !== 'alta_pendiente') return res.status(401).json({ error: 'registro_token_invalido' });
+    const solicitante = await findActiveSolicitante(payload.clientId);
+    if (!solicitante || !isAllowedCallback(payload.redirectUri, normalizeRedirectUris(solicitante.urlOrigen, solicitante.redirectUris))) return res.status(401).json({ error: 'solicitante_no_autorizado' });
+    const registro = await Registro.findById(payload.registroId);
+    if (!registro) return res.status(404).json({ error: 'Registro no encontrado' });
+    if (registro.totpVerified) return res.status(409).json({ error: 'alta_ya_confirmada' });
+    const verified = speakeasy.totp.verify({ secret: registro.totpSecret, encoding: 'base32', token: String(codigo).replace(/\s/g, ''), window: 1 });
+    if (!verified) return res.status(400).json({ error: 'Código incorrecto. Comprueba tu autenticador.' });
+    registro.totpVerified = true;
+    registro.activo = true;
+    await registro.save();
+    await registrarLog({ dip: registro.dip, registroId: registro._id, servicio: solicitante.nombre, servicioUrl: payload.redirectUri, evento: 'registro_creado', ip: getIP(req), ua: req.headers['user-agent'], fase: 'completa', metadatos: { accion: 'alta_confirmada_totp' } });
+    return res.json({ ok: true, message: 'Cuenta PlacetaID activada. Ya puedes iniciar sesión.' });
+  } catch (error) {
+    if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') return res.status(401).json({ error: 'registro_token_expirado', message: 'Por seguridad, reinicia el registro desde la pasarela.' });
+    console.error('[alta] Error al confirmar:', error.message);
+    return res.status(500).json({ error: 'No se pudo confirmar el alta.' });
   }
 });
 

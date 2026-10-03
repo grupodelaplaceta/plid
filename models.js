@@ -1,16 +1,76 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
+
+function dipKeys() {
+  const secret = process.env.PLACETAID_DNI_ENCRYPTION_KEY || process.env.JWT_SECRET || '';
+  if (secret.length < 32 || secret === 'secret') throw new Error('PLACETAID_DNI_ENCRYPTION_KEY_REQUIRED');
+  return {
+    encryption: crypto.createHash('sha256').update(`placetaid-dni-encryption-v1:${secret}`).digest(),
+    fingerprint: crypto.createHmac('sha256', secret).update('placetaid-dni-fingerprint-v1').digest()
+  };
+}
+
+function encryptDip(dip) {
+  const keys = dipKeys();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', keys.encryption, iv);
+  const ciphertext = Buffer.concat([cipher.update(dip, 'utf8'), cipher.final()]);
+  return [iv, cipher.getAuthTag(), ciphertext].map(value => value.toString('base64url')).join('.');
+}
+
+function decryptDip(value) {
+  const [ivText, tagText, cipherText] = String(value || '').split('.');
+  if (!ivText || !tagText || !cipherText) return null;
+  const decipher = crypto.createDecipheriv('aes-256-gcm', dipKeys().encryption, Buffer.from(ivText, 'base64url'));
+  decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+  return Buffer.concat([decipher.update(Buffer.from(cipherText, 'base64url')), decipher.final()]).toString('utf8');
+}
+
+function fingerprintDip(value) {
+  return crypto.createHmac('sha256', dipKeys().fingerprint).update(String(value).toUpperCase(), 'utf8').digest('hex');
+}
+
+function expandDipFilters(filter) {
+  if (Array.isArray(filter)) return filter.map(expandDipFilters);
+  if (!filter || typeof filter !== 'object' || filter instanceof Date) return filter;
+  const result = {};
+  for (const [key, value] of Object.entries(filter)) {
+    if (key === 'dip') {
+      if (typeof value === 'string' && /^\d{8}[A-Z]$/i.test(value)) result.dip = { $in: [value.toUpperCase(), fingerprintDip(value)] };
+      else if (value && typeof value === 'object' && Array.isArray(value.$in)) result.dip = { ...value, $in: [...new Set(value.$in.flatMap(item => typeof item === 'string' && /^\d{8}[A-Z]$/i.test(item) ? [item.toUpperCase(), fingerprintDip(item)] : [item]))] };
+      else if (value && typeof value === 'object' && typeof value.$eq === 'string' && /^\d{8}[A-Z]$/i.test(value.$eq)) result.dip = { ...value, $eq: fingerprintDip(value.$eq) };
+      else result.dip = value;
+    } else result[key] = expandDipFilters(value);
+  }
+  return result;
+}
+
+function revealLeanDip(value) {
+  if (Array.isArray(value)) return value.forEach(revealLeanDip);
+  if (!value || typeof value !== 'object') return;
+  if (typeof value.dip === 'string' && value.dipEncrypted) {
+    try { value.dip = decryptDip(value.dipEncrypted) || value.dip; } catch { value.dip = null; }
+    delete value.dipEncrypted;
+  }
+}
 
 // ── REGISTRO (Usuario) ────────────────────────────────────────────────────────
 const registroSchema = new mongoose.Schema({
   dip: {
     type: String,
+    get: function (stored) {
+      if (!stored || /^\d{8}[A-Z]$/i.test(stored) || !this.dipEncrypted) return stored;
+      try { return decryptDip(this.dipEncrypted) || stored; } catch { return null; }
+    },
     required: false,
     unique: true,
     sparse: true,
     uppercase: true,
     trim: true,
-    match: /^\d{8}[A-Z]$/
+    validate: { validator: value => !value || /^\d{8}[A-Z]$/i.test(value) || /^[a-f0-9]{64}$/i.test(value), message: 'DIP cifrado o formato de identidad no válido' }
   },
+  dipEncrypted: { type: String, select: false },
+  legalConsents: [{ document: String, version: String, acceptedAt: Date }],
   placeid: {
     type: String,
     trim: true,
@@ -127,6 +187,32 @@ const registroSchema = new mongoose.Schema({
   }
 });
 
+registroSchema.pre('save', function encryptIdentityBeforeSave(next) {
+  try {
+    const rawDip = this.get('dip', null, { getters: false });
+    if ((this.isNew || this.isModified('dip')) && rawDip && /^\d{8}[A-Z]$/i.test(rawDip)) {
+      this.set('dipEncrypted', encryptDip(rawDip.toUpperCase()));
+      this.set('dip', fingerprintDip(rawDip));
+    }
+    next();
+  } catch (error) { next(error); }
+});
+
+registroSchema.pre(/^find/, function protectAndLookupEncryptedDip(next) {
+  try {
+    this.setQuery(expandDipFilters(this.getFilter()));
+    this.select('+dipEncrypted');
+    next();
+  } catch (error) { next(error); }
+});
+registroSchema.pre('exists', function lookupEncryptedDipForExists(next) {
+  try { this.setQuery(expandDipFilters(this.getFilter())); next(); }
+  catch (error) { next(error); }
+});
+registroSchema.post(/^find/, function revealEncryptedDip(result) {
+  if (this.mongooseOptions().lean) revealLeanDip(result);
+});
+
 // Calcular edad dinámica
 registroSchema.virtual('edad').get(function () {
   if (!this.fechaNacimiento) return null;
@@ -138,7 +224,7 @@ registroSchema.virtual('edad').get(function () {
   return edad;
 });
 
-registroSchema.set('toJSON', { virtuals: true });
+registroSchema.set('toJSON', { virtuals: true, getters: true, transform(_doc, ret) { delete ret.dipEncrypted; return ret; } });
 
 // ── LOG DE AUTENTICACIÓN ──────────────────────────────────────────────────────
 const logSchema = new mongoose.Schema({

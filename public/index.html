@@ -403,6 +403,9 @@ body {
   text-align: center;
   margin-bottom: 2.75rem;
 }
+.placetaid-mobile-brand { display:block; width:88px; height:88px; margin:0 auto .75rem; object-fit:contain; filter:drop-shadow(0 12px 24px rgba(36,8,105,.18)); }
+.gateway-legal-links { display:flex; justify-content:center; gap:14px; margin-top:14px; font-size:.75rem; }
+.gateway-legal-links a { color:var(--accent-dark); font-weight:700; }
 
 .login-logo .brand {
   font-size: 2.2rem;
@@ -2217,9 +2220,15 @@ textarea.form-input { resize: vertical; }
           <div id="solicitanteLogoWrap" style="display:none;margin-bottom:0.75rem;">
             <img id="solicitanteLogoImg" src="" alt="" style="max-height:72px;max-width:220px;object-fit:contain;">
           </div>
-          <span class="brand">Placeta<em>ID</em></span>
-          <div class="tagline">Pasarela de Identificación · Grupo de La Placeta</div>
+          <img class="placetaid-mobile-brand" src="/assets/placetaid-logo.png" alt="PlacetaID" />
+          <div class="tagline">Identidad segura · Grupo de La Placeta</div>
         </div>
+
+        <section id="gatewayError" role="alert" aria-live="assertive" style="display:none;padding:1.1rem;border:1px solid #f2c4c4;border-radius:16px;background:#fff5f5;color:#7f1d1d;margin-bottom:1rem;text-align:left;">
+          <strong>Enlace de acceso no válido</strong>
+          <p id="gatewayErrorText" style="margin:.5rem 0 0;line-height:1.6;">PlacetaID solo se abre desde una aplicación registrada mediante su pasarela de autenticación.</p>
+        </section>
+        <div class="gateway-legal-links"><a href="https://laplaceta.org/aviso-legal" target="_blank" rel="noopener noreferrer">Aviso legal</a><a href="https://laplaceta.org/privacidad" target="_blank" rel="noopener noreferrer">Privacidad</a></div>
 
         <div class="request-card" id="requestCard">
           <div class="request-card-header">
@@ -2279,6 +2288,37 @@ textarea.form-input { resize: vertical; }
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="glass-card" id="registrationEntry" style="display:none;padding:1rem;margin-top:1rem;">
+          <div class="card-heading">¿Todavía no tienes PlacetaID?</div>
+          <div class="card-subheading" style="margin:.35rem 0 .8rem;">Crea tu identidad desde esta pasarela segura. Para continuar necesitas tener 16 años o más.</div>
+          <button type="button" class="btn btn-ghost btn-full" onclick="abrirRegistro()">Crear cuenta PlacetaID</button>
+        </div>
+
+        <div class="glass-card" id="registrationPanel" style="display:none;padding:1.2rem;">
+          <div class="card-heading">Crear identidad PlacetaID</div>
+          <div class="card-subheading" style="margin:.35rem 0 1rem;">Tu DNI se cifra al guardarse y se usa una huella criptográfica para impedir registros duplicados.</div>
+          <div id="registrationAlert" role="status" aria-live="polite"></div>
+          <form id="registrationForm" onsubmit="crearCuentaPlacetaID(event)">
+            <div class="form-group"><label class="form-label" for="regNombre">Nombre</label><input class="form-input" id="regNombre" autocomplete="given-name" required maxlength="80"></div>
+            <div class="form-group"><label class="form-label" for="regApellidos">Apellidos</label><input class="form-input" id="regApellidos" autocomplete="family-name" required maxlength="100"></div>
+            <div class="form-group"><label class="form-label" for="regDip">DNI</label><input class="form-input" id="regDip" autocomplete="off" required maxlength="9" style="text-transform:uppercase"></div>
+            <div class="form-group"><label class="form-label" for="regNacimiento">Fecha de nacimiento</label><input class="form-input" id="regNacimiento" type="date" autocomplete="bday" required></div>
+            <div class="form-group"><label class="form-label" for="regCorreo">Correo electrónico</label><input class="form-input" id="regCorreo" type="email" autocomplete="email" required maxlength="160"></div>
+            <div class="form-group"><label class="form-label" for="regPassword">Contraseña</label><input class="form-input" id="regPassword" type="password" autocomplete="new-password" minlength="12" required><small>Usa al menos 12 caracteres.</small></div>
+            <label class="form-group" style="display:flex;align-items:flex-start;gap:.65rem"><input id="regLegal" type="checkbox" required style="margin-top:.3rem"><span>Acepto el <a href="https://laplaceta.org/aviso-legal" target="_blank" rel="noopener noreferrer">Aviso Legal</a>.</span></label>
+            <label class="form-group" style="display:flex;align-items:flex-start;gap:.65rem"><input id="regPrivacy" type="checkbox" required style="margin-top:.3rem"><span>Acepto la <a href="https://laplaceta.org/privacidad" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>.</span></label>
+            <button class="btn btn-primary btn-full" id="btnRegister" type="submit">Crear identidad</button>
+          </form>
+          <div id="registrationTotp" style="display:none;text-align:center;margin-top:1rem">
+            <p>Escanea el QR con PlacetaID Móvil o cualquier autenticador compatible.</p>
+            <img id="registrationQr" alt="QR de configuración de autenticador" style="width:min(240px,100%);margin:1rem auto;background:#fff;padding:.75rem;border-radius:16px">
+            <label class="form-label" for="registrationCode">Código de 6 dígitos</label>
+            <input class="form-input" id="registrationCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000">
+            <button type="button" class="btn btn-primary btn-full" style="margin-top:.8rem" onclick="confirmarAltaPlacetaID()">Verificar y activar</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-full" style="margin-top:.7rem" onclick="cerrarRegistro()">Volver a iniciar sesión</button>
         </div>
 
         <!-- ── FASE 1 (2FA) ── -->
@@ -2708,6 +2748,7 @@ const requestedPlatform = getUrlParam('platform') || 'web';
 const returnState = getUrlParam('state') || '';
 const codeChallenge = getUrlParam('code_challenge') || '';
 const requestedServiceName = getUrlParam('service') || getUrlParam('servicio') || '';
+let gatewayAuthorized = false;
 
 // DEBUG VISIBLE: mostrar en la consola del navegador qué se leyó realmente
 console.log('[PlacetaID] URL:', window.location.href);
@@ -2716,16 +2757,6 @@ console.log('[PlacetaID] redirectUrl from URL:', redirectUrl);
 console.log('[PlacetaID] clientId:', clientId);
 
 // Guardar redirectUrl en sessionStorage para que sobreviva a cualquier cambio de estado
-if (redirectUrl) {
-  try { sessionStorage.setItem('placetaid_redirect_url', redirectUrl); } catch (e) {}
-} else {
-  // Intentar recuperar de sessionStorage si se perdió
-  try {
-    const savedRedirect = sessionStorage.getItem('placetaid_redirect_url');
-    if (savedRedirect) redirectUrl = savedRedirect;
-  } catch (e) {}
-}
-
 const state = {
   tokenFase2: null,
   tokenSesion: null,
@@ -2737,6 +2768,7 @@ const state = {
   returnState,
   codeChallenge,
   requestedServiceName,
+  registrationToken: null,
   solicitanteInfo: null,
   solicitanteRedirectUrl: null // Se rellena al cargar info del solicitante registrado
 };
@@ -2886,18 +2918,38 @@ async function cargarContextoSolicitante() {
   // Si ya hay sesión admin activa, no mostrar splash
   if (state.tokenSesion && state.user?.rol === 'administrador' && !redirectUrl) return;
 
+  const failGateway = (message) => {
+    gatewayAuthorized = false;
+    const errorPanel = document.getElementById('gatewayError');
+    const errorText = document.getElementById('gatewayErrorText');
+    if (errorText) errorText.textContent = message;
+    if (errorPanel) errorPanel.style.display = '';
+    ['requestCard', 'stepsContainer', 'methodSelector', 'fase1Panel', 'fase2Panel', 'movilPanel'].forEach(id => {
+      const node = document.getElementById(id);
+      if (node) node.style.display = 'none';
+    });
+    ocultarSplash();
+  };
+
+  if (!clientId || !redirectUrl || !/^https:\/\//i.test(redirectUrl)) {
+    return failGateway('Falta el identificador de la aplicación o su URL de retorno segura. Vuelve a la web o app que te envió aquí y pulsa “Iniciar sesión”.');
+  }
+
   // Mostrar splash loading inmediatamente
   mostrarSplashConBranding();
 
   renderSolicitanteContext();
-  if (!clientId) {
-    ocultarSplash();
-    return;
-  }
   try {
     const res = await fetch('/api/solicitante/info', { headers: { 'X-API-Key': clientId } });
     if (!res.ok) throw new Error('cliente_no_autorizado');
     const info = await res.json();
+    const callbacks = Array.isArray(info.redirectUris) ? info.redirectUris : [info.urlOrigen].filter(Boolean);
+    if (!callbacks.includes(redirectUrl)) {
+      return failGateway('La dirección de retorno no coincide con las autorizadas para esta aplicación. Cierra esta ventana y vuelve a iniciar sesión desde el servicio original.');
+    }
+    gatewayAuthorized = true;
+    const registrationEntry = document.getElementById('registrationEntry');
+    if (registrationEntry) registrationEntry.style.display = '';
 
     // Actualizar splash con branding del solicitante
     mostrarSplashConBranding(info);
@@ -2905,15 +2957,88 @@ async function cargarContextoSolicitante() {
 
     ocultarSplash();
   } catch {
-    const alertContainer = document.getElementById('solicitanteAlert');
-    const trustPill = document.getElementById('requestTrust');
-    if (trustPill) trustPill.textContent = 'Cliente pendiente';
-    if (alertContainer) alertContainer.innerHTML = '<div class="alert alert-warning"><strong>No se ha podido verificar el solicitante.</strong> Continúa solo si reconoces este acceso.</div>';
-    ocultarSplash();
+    failGateway('No se ha podido validar la aplicación solicitante. Por seguridad, no continúes desde un enlace directo; vuelve a la app o web que inició el acceso.');
   }
 }
 
 setTimeout(() => { void cargarContextoSolicitante(); }, 50);
+
+function abrirRegistro() {
+  if (!gatewayAuthorized) return;
+  document.getElementById('methodSelector').style.display = 'none';
+  document.getElementById('registrationEntry').style.display = 'none';
+  document.getElementById('registrationPanel').style.display = '';
+}
+
+function cerrarRegistro() {
+  document.getElementById('registrationPanel').style.display = 'none';
+  document.getElementById('registrationForm').style.display = '';
+  document.getElementById('registrationTotp').style.display = 'none';
+  document.getElementById('methodSelector').style.display = '';
+  document.getElementById('registrationEntry').style.display = gatewayAuthorized ? '' : 'none';
+  document.getElementById('registrationAlert').textContent = '';
+  state.registrationToken = null;
+}
+
+function edadDesdeFecha(fecha) {
+  const nacimiento = new Date(`${fecha}T00:00:00`);
+  if (Number.isNaN(nacimiento.getTime())) return -1;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  if (hoy.getMonth() < nacimiento.getMonth() || (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate())) edad--;
+  return edad;
+}
+
+async function crearCuentaPlacetaID(event) {
+  event.preventDefault();
+  const notice = document.getElementById('registrationAlert');
+  if (!gatewayAuthorized) return;
+  const fechaNacimiento = document.getElementById('regNacimiento').value;
+  const edad = edadDesdeFecha(fechaNacimiento);
+  if (edad >= 0 && edad < 16) {
+    notice.innerHTML = '<div class="alert alert-warning"><strong>Alta para menores de 16 años</strong><br>Tu madre, padre o tutor debe descargar PlacetaID Móvil y tú debes usar Placeta Junior; desde allí podrán solicitar y autorizar tu alta.</div>';
+    return;
+  }
+  if (edad < 0) { notice.textContent = 'Introduce una fecha de nacimiento válida.'; return; }
+  if (!document.getElementById('regLegal').checked || !document.getElementById('regPrivacy').checked) { notice.textContent = 'Acepta ambos documentos para continuar.'; return; }
+  setBtn('btnRegister', true, 'Creando identidad…');
+  const body = {
+    nombre: document.getElementById('regNombre').value.trim(),
+    apellidos: document.getElementById('regApellidos').value.trim(),
+    dip: document.getElementById('regDip').value.trim().toUpperCase(),
+    fechaNacimiento,
+    correo: document.getElementById('regCorreo').value.trim(),
+    password: document.getElementById('regPassword').value,
+    aceptaAvisoLegal: document.getElementById('regLegal').checked,
+    aceptaPrivacidad: document.getElementById('regPrivacy').checked,
+    clientId: state.clientId,
+    redirectUri: state.redirectUrl
+  };
+  try {
+    const response = await apiFetch('/api/registro', { method: 'POST', body: JSON.stringify(body) });
+    if (!response.ok) {
+      const message = response.data?.message || response.data?.error || 'No se pudo crear la identidad.';
+      notice.innerHTML = `<div class="alert alert-error">${escapeHtml(message)}</div>`;
+      return;
+    }
+    state.registrationToken = response.data.registrationToken;
+    document.getElementById('registrationForm').style.display = 'none';
+    document.getElementById('registrationQr').src = response.data.qrCode;
+    document.getElementById('registrationTotp').style.display = '';
+    notice.innerHTML = '<div class="alert alert-success">Identidad creada con el DNI protegido. Verifica tu autenticador para activar la cuenta.</div>';
+  } catch {
+    notice.textContent = 'No se pudo completar el registro. Comprueba tu conexión e inténtalo de nuevo.';
+  } finally { setBtn('btnRegister', false, 'Crear identidad'); }
+}
+
+async function confirmarAltaPlacetaID() {
+  const notice = document.getElementById('registrationAlert');
+  if (!state.registrationToken) return;
+  const { ok, data } = await apiFetch('/api/registro/confirmar-alta', { method: 'POST', body: JSON.stringify({ registrationToken: state.registrationToken, codigo: document.getElementById('registrationCode').value }) });
+  if (!ok) { notice.innerHTML = `<div class="alert alert-error">${escapeHtml(data?.message || data?.error || 'No se pudo verificar el código.')}</div>`; return; }
+  document.getElementById('registrationTotp').style.display = 'none';
+  notice.innerHTML = `<div class="alert alert-success">${escapeHtml(data.message)} Ya puedes volver e iniciar sesión.</div>`;
+}
 
 // No hay panel admin en PlacetaID — todo se gestiona desde el CRM
 // Los administradores son redirigidos al CRM tras el login
@@ -3052,13 +3177,13 @@ async function loginFase1() {
 }
 
 function finishLogin(data) {
+  if (!gatewayAuthorized) return;
   state.tokenSesion = data.tokenSesion;
   state.user = data.registro;
 
   // ── REDIRIGIR SIEMPRE al callback configurado ──────────────────────────
   // Fuentes: server response > URL params > solicitante registrado > sessionStorage backup
-  const redirectTo = data.servicioUrl || state.redirectUrl || state.solicitanteRedirectUrl ||
-    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('placetaid_redirect_url') : null);
+  const redirectTo = data.servicioUrl || state.redirectUrl;
 
   if (redirectTo) {
     const sep = redirectTo.includes('?') ? '&' : '?';
