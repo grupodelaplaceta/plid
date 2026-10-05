@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
+    "migrate:legacy-v27": "node scripts/migrate-password-hashes-v27.js",
+    "migrate:methods-v27": "node scripts/migrate-auth-methods-v27.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

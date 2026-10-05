@@ -2064,6 +2064,75 @@ app.post('/api/setup/seed-admin', async (req, res) => {
 
 // ── API: PLACETAID MÓVIL ─────────────────────────────────────────────────────
 
+async function syncV27Device(action, device) {
+  const apiBase = String(process.env.PLACETAID_V27_API_URL || '').trim()
+  const enrollmentKey = String(process.env.PLACETAID_V27_DEVICE_KEY || '')
+  if (!apiBase && !enrollmentKey) return false
+  if (!apiBase || enrollmentKey.length < 32) throw new Error('PLACETAID_V27_DEVICE_SYNC_MISCONFIGURED')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const url = new URL(`/api/internal/devices/${action}`, apiBase)
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-PlacetaID-Device-Key': enrollmentKey,
+      },
+      body: JSON.stringify(device),
+      signal: controller.signal,
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || payload?.ok !== true) throw new Error(`PLACETAID_V27_DEVICE_SYNC_FAILED_${response.status}`)
+    return true
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function legacyProfileForV27(registro) {
+  return {
+    nombre: registro.nombre || '',
+    apellidos: registro.apellidos || '',
+    placeid: registro.placeid || '',
+    correo: registro.correo || '',
+    fechaNacimiento: registro.fechaNacimiento || null,
+    rol: registro.rol || 'miembro',
+    activo: registro.activo !== false,
+    bloqueado: registro.bloqueado === true,
+    banned: registro.banned === true,
+  }
+}
+
+async function registeredDeviceToken(req, dip) {
+  const token = String(req.headers['x-device-token'] || req.headers['x-placetaid-device-token'] || req.body?.deviceTokens?.[dip] || req.body?.deviceToken || req.body?.deviceId || '')
+  if (token.length < 16 || token.length > 512) return null
+  const device = await MobileDevice.findOne({
+    dip,
+    activo: true,
+    $or: [{ deviceId: token }, { deviceToken: token }],
+  }).select('deviceId deviceToken')
+  return device ? token : null
+}
+
+async function requestV27Mobile(pathname, deviceToken, body) {
+  const apiBase = String(process.env.PLACETAID_V27_API_URL || '').trim()
+  if (!apiBase) throw new Error('PLACETAID_V27_API_URL_NOT_CONFIGURED')
+  const response = await fetch(new URL(pathname, apiBase), {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      'X-Device-Token': deviceToken,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(10_000),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(`PLACETAID_V27_MOBILE_API_FAILED_${response.status}`)
+  return payload
+}
+
 // Registrar dispositivo móvil asociado a un PlacetaID
 // Registrar dispositivo (móvil o PC)
 app.post('/api/mobil/register', async (req, res) => {
@@ -2129,13 +2198,27 @@ app.post('/api/mobil/register', async (req, res) => {
       mismo.activo = true;
       mismo.ultimoAcceso = new Date();
       await mismo.save();
-      return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado` });
+      const v27Synced = await syncV27Device('register', {
+        dip: cleanDip,
+        deviceId: devId,
+        deviceName: mismo.deviceName,
+        method: tipo === 'pc' ? 'desktop' : 'mobile',
+        profile: legacyProfileForV27(registro),
+      });
+      return res.json({ ok: true, mensaje: `${tipo === 'pc' ? 'PC' : 'Dispositivo'} actualizado`, v27Synced });
     }
 
     if (tipo === 'movil') {
       // Un ciudadano usa UN móvil. Si ya se verificó su contraseña, vincular
       // un móvil nuevo (reinstalación, cambio de teléfono o recuperación)
       // SUSTITUYE cualquier móvil anterior de este DIP: nunca un 409.
+      const previousDevices = await MobileDevice.find({ dip: cleanDip, tipo: 'movil' }).select('deviceId');
+      for (const previous of previousDevices) {
+        if (previous.deviceId && previous.deviceId !== devId) {
+          const revoked = await syncV27Device('revoke', { dip: cleanDip, deviceId: previous.deviceId });
+          if (!revoked) return res.status(503).json({ error: 'No se pudo confirmar la desvinculación del dispositivo anterior en PlacetaID v27.' });
+        }
+      }
       await MobileDevice.deleteMany({ dip: cleanDip, tipo: 'movil' });
       await MobileDevice.create({
         dip: cleanDip,
@@ -2152,7 +2235,14 @@ app.post('/api/mobil/register', async (req, res) => {
         ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
         metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo_movil_reemplaza', tipo }
       });
-      return res.json({ ok: true, mensaje: 'Móvil vinculado correctamente' });
+      const v27Synced = await syncV27Device('register', {
+        dip: cleanDip,
+        deviceId: devId,
+        deviceName: deviceName || 'Dispositivo móvil',
+        method: 'mobile',
+        profile: legacyProfileForV27(registro),
+      });
+      return res.json({ ok: true, mensaje: 'Móvil vinculado correctamente', v27Synced });
     }
 
     // PC: máximo 3 por DIP (el mismo deviceId ya se actualizó arriba).
@@ -2175,7 +2265,14 @@ app.post('/api/mobil/register', async (req, res) => {
       ip: getIP(req), ua: req.headers['user-agent'], fase: 'registro_dispositivo',
       metadatos: { accion: 'registro_dispositivo', resultado: 'nuevo_pc', tipo }
     });
-    res.json({ ok: true, mensaje: 'PC vinculado correctamente' });
+    const v27Synced = await syncV27Device('register', {
+      dip: cleanDip,
+      deviceId: devId,
+      deviceName: deviceName || 'PC',
+      method: 'desktop',
+      profile: legacyProfileForV27(registro),
+    });
+    res.json({ ok: true, mensaje: 'PC vinculado correctamente', v27Synced });
   } catch (err) {
     console.error('Error register device:', err);
     res.status(500).json({ error: 'Error al registrar dispositivo' });
@@ -2185,27 +2282,23 @@ app.post('/api/mobil/register', async (req, res) => {
 // Desvincular dispositivo
 app.post('/api/mobil/unregister', async (req, res) => {
   try {
-    const { dip, deviceId } = req.body;
-    if (!dip && !deviceId) return res.status(400).json({ error: 'DIP o deviceId requerido' });
+    const { dip } = req.body;
+    const deviceId = String(req.body?.deviceId || '');
+    const cleanDip = normalizeDip(dip);
+    if (!cleanDip || !deviceId || deviceId.length > 256) return res.status(400).json({ error: 'DIP y deviceId válidos requeridos' });
 
-    let deleted;
-    if (deviceId) {
-      // Buscar por deviceId o _id (para compatibilidad con docs antiguos)
-      deleted = await MobileDevice.findOneAndDelete({
-        $or: [{ deviceId }, { _id: deviceId.match(/^[0-9a-f]{24}$/i) ? deviceId : undefined }]
-      });
-      // Si no se encontró, intentar por _id directamente
-      if (!deleted && deviceId.match(/^[0-9a-f]{24}$/i)) {
-        deleted = await MobileDevice.findByIdAndDelete(deviceId);
-      }
-    }
-    if (!deleted && dip) {
-      deleted = await MobileDevice.findOneAndDelete({ dip: normalizeDip(dip) });
-    }
-    if (!deleted) return res.status(404).json({ error: 'No hay dispositivo registrado' });
+    const deviceIds = [{ deviceId }];
+    if (/^[0-9a-f]{24}$/i.test(deviceId)) deviceIds.push({ _id: deviceId });
+    const device = await MobileDevice.findOne({ dip: cleanDip, $or: deviceIds });
+    if (!device) return res.status(404).json({ error: 'No hay dispositivo registrado' });
 
-    console.log(`💻 Dispositivo desvinculado: ${deleted.deviceName || 'unknown'} (${deleted.dip})`);
-    res.json({ ok: true, mensaje: 'Dispositivo desvinculado' });
+    const v27Synced = device.deviceId || device.deviceToken
+      ? await syncV27Device('revoke', { dip: device.dip, deviceId: device.deviceId || device.deviceToken })
+      : false;
+    if (!v27Synced) return res.status(503).json({ error: 'No se pudo confirmar la desvinculación en PlacetaID v27', v27Synced: false });
+    await device.deleteOne();
+    console.log(`💻 Dispositivo desvinculado: ${device.deviceName || 'unknown'} (${device.dip})`);
+    res.json({ ok: true, mensaje: 'Dispositivo desvinculado', v27Synced });
   } catch (err) {
     console.error('Error unregister:', err);
     res.status(500).json({ error: 'Error al desvincular dispositivo' });
@@ -2297,8 +2390,13 @@ app.get('/api/mobil/pending', async (req, res) => {
       expiraEn: { $gt: new Date() }
     }).sort({ creadoEn: -1 }).limit(20);
 
-    res.json({ ok: true, requests });
+    const token = await registeredDeviceToken(req, cleanDip);
+    const v27 = token
+      ? await requestV27Mobile(`/api/mobil/pending?dip=${encodeURIComponent(cleanDip)}`, token)
+      : null;
+    res.json({ ok: true, requests: [...requests, ...(v27?.requests || [])] });
   } catch (err) {
+    console.error('Error al obtener solicitudes de autenticación:', err?.message || err);
     res.status(500).json({ error: 'Error al obtener solicitudes' });
   }
 });
@@ -2311,8 +2409,13 @@ app.post('/api/mobil/authorize', async (req, res) => {
 
     const cleanDip = normalizeDip(dip);
 
-    const authReq = await AuthRequest.findById(requestId);
-    if (!authReq) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    const authReq = /^[a-f0-9]{24}$/i.test(requestId) ? await AuthRequest.findById(requestId) : null;
+    if (!authReq) {
+      const token = await registeredDeviceToken(req, cleanDip);
+      if (!token) return res.status(401).json({ error: 'Se requiere el token del dispositivo vinculado para aprobar esta solicitud.' });
+      const v27 = await requestV27Mobile('/api/mobil/authorize', token, { requestId, dip: cleanDip, authorized: authorized === true });
+      return res.json(v27);
+    }
     if (authReq.dip !== cleanDip) return res.status(403).json({ error: 'Esta solicitud no corresponde a este DIP' });
     if (authReq.estado !== 'pending') return res.status(400).json({ error: `La solicitud ya fue ${authReq.estado}` });
     if (authReq.expiraEn < new Date()) {
@@ -2346,8 +2449,8 @@ app.post('/api/mobil/authorize', async (req, res) => {
 
     res.json({ ok: true, estado: authReq.estado, mensaje: authorized ? 'Solicitud autorizada' : 'Solicitud denegada' });
   } catch (err) {
-    console.error('Error authorize:', err);
-    res.status(500).json({ error: 'Error al procesar solicitud' });
+    console.error('Error authorize:', err?.message || err);
+    res.status(err?.message?.includes('PLACETAID_V27_MOBILE_API_FAILED_') ? 502 : 500).json({ error: 'Error al procesar solicitud' });
   }
 });
 
@@ -2366,6 +2469,7 @@ app.get('/api/mobil/status/:dip', async (req, res) => {
       registro: publicRegistroData(registro)
     });
   } catch (err) {
+    console.error('Error al consultar estado de PlacetaID:', err?.message || err);
     res.status(500).json({ error: 'Error al consultar estado' });
   }
 });
@@ -3260,14 +3364,24 @@ app.post('/api/mobil/multi/pending', async (req, res) => {
     const { dips } = req.body;
     if (!dips || !Array.isArray(dips) || dips.length === 0) return res.status(400).json({ error: 'Array de DIPs requerido' });
     const resultados = [];
-    for (const dip of dips) {
+    for (const rawDip of dips) {
+      const dip = normalizeDip(rawDip);
+      if (!/^\d{8}[A-Z]$/.test(dip)) continue;
       const requests = await AuthRequest.find({ dip, estado: 'pending' }).sort({ creadoEn: -1 }).limit(10).lean();
       for (const r of requests) {
         resultados.push({ ...r, identidad: dip });
       }
+      const token = await registeredDeviceToken(req, dip);
+      if (token) {
+        const v27 = await requestV27Mobile(`/api/mobil/pending?dip=${encodeURIComponent(dip)}`, token);
+        resultados.push(...(v27?.requests || []).map((request) => ({ ...request, identidad: dip })));
+      }
     }
     res.json(resultados.sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn)));
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('Error consultando autorizaciones multi-identidad:', e?.message || e);
+    res.status(e?.message?.includes('PLACETAID_V27_MOBILE_API_FAILED_') ? 502 : 500).json({ error: 'No se pudieron consultar las autorizaciones pendientes.' });
+  }
 });
 
 // ── POST /api/mobil/multi/votaciones — Votaciones activas para varios DIPs ─

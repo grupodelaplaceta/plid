@@ -37,6 +37,42 @@ node server.js
 
 Accede en: http://localhost:3000
 
+## Migrar cuentas antiguas a PlacetaID v27
+
+La migración controlada conserva las contraseñas existentes verificando sus hashes bcrypt; no exporta ni transmite contraseñas en claro. Primero aplica las migraciones de Supabase `20261004` a `20261007` del repositorio `placetaid-web-2027` y configura `PLACETAID_V27_API_URL` y el mismo `PLACETAID_V27_DEVICE_KEY` de ambos servidores en `.env`.
+
+Al registrar un dispositivo nuevo, PL26 verifica la contraseña antes de enlazar el perfil y el dispositivo con v27; no transfiere la contraseña. Para traer los métodos existentes en lote, configura `MONGO_URI`, `PLACETAID_V27_API_URL` y `PLACETAID_V27_DEVICE_KEY` en `.env`. Se migran dispositivos activos y autenticadores TOTP previamente verificados; se envían por HTTPS directamente al API interno v27, se almacenan los tokens como hashes y los secretos TOTP cifrados. No se transmiten contraseñas. Los dispositivos excluidos (inactivos o con datos inválidos) no se habilitan.
+
+Primero revisa los conteos sin modificar nada:
+
+```bash
+npm run migrate:methods-v27
+```
+
+Para aplicar la migración idempotente:
+
+```bash
+npm run migrate:methods-v27 -- --apply
+```
+
+El informe muestra solo cantidades; nunca imprime DIPs, tokens ni secretos TOTP. Conserva `.env` fuera de Git. Las identidades deshabilitadas no reciben métodos activos.
+
+Desde este directorio, ejecuta primero un informe de solo lectura:
+
+```bash
+npm run migrate:legacy-v27
+```
+
+Cuando el recuento sea el esperado, ejecuta la importación:
+
+```bash
+npm run migrate:legacy-v27 -- --apply
+```
+
+Se importan solo cuentas con DIP válido y hash bcrypt. Si su DIP todavía no existe en la tabla canónica `solicitantes`, se crea el perfil con los datos disponibles de MongoDB, preservando el estado bloqueado/inactivo. La importación es idempotente y no sobrescribe credenciales ya migradas. Después, el titular debe volver a vincular el móvil o Desktop para crear el método v27.
+
+El script requiere acceso al MongoDB de PL26 (`MONGO_URI`) y conexión HTTPS al API v27. No subas los resultados, hashes ni variables de entorno a GitHub.
+
 ---
 
 ## Primer uso — Crear administrador
