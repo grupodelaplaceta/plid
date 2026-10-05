@@ -3339,11 +3339,21 @@ app.post('/api/mobil/documentos/:id/rechazar', async (req, res) => {
 
 // ── GET /api/mobil/notificaciones/:dip — Notificaciones para un DIP ──────
 app.get('/api/mobil/notificaciones/:dip', async (req, res) => {
-  const notifs = memNotificaciones
-    .filter(n => n.dip === req.params.dip)
-    .sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn))
-    .slice(0, 50);
-  res.json(notifs);
+  try {
+    const dip = normalizeDip(req.params.dip);
+    const notifs = memNotificaciones.filter(n => n.dip === dip);
+    const token = await registeredDeviceToken(req, dip);
+    if (token) {
+      const v27 = await requestV27Mobile(`/api/mobil/notificaciones/${encodeURIComponent(dip)}`, token);
+      notifs.push(...(Array.isArray(v27) ? v27 : []));
+    }
+    res.json([...new Map(notifs.map(n => [n._id || n.id, n])).values()]
+      .sort((a, b) => new Date(b.creadoEn || b.fecha || 0) - new Date(a.creadoEn || a.fecha || 0))
+      .slice(0, 50));
+  } catch (e) {
+    console.error('Error consultando notificaciones de PlacetaID:', e?.message || e);
+    res.status(e?.message?.includes('PLACETAID_V27_MOBILE_API_FAILED_') ? 502 : 500).json({ error: 'No se pudieron consultar las notificaciones.' });
+  }
 });
 
 // ── POST /api/mobil/notificaciones/leer — Marcar notificación como leída ─
@@ -3502,13 +3512,22 @@ app.post('/api/mobil/multi/documentos/todos', async (req, res) => {
 
 // ── POST /api/mobil/multi/notificaciones — Notificaciones para varios DIPs ─
 app.post('/api/mobil/multi/notificaciones', async (req, res) => {
-  const { dips } = req.body;
-  if (!dips || !Array.isArray(dips)) return res.json([]);
-  const notifs = memNotificaciones
-    .filter(n => dips.includes(n.dip))
-    .sort((a, b) => new Date(b.creadoEn) - new Date(a.creadoEn))
-    .slice(0, 100);
-  res.json(notifs);
+  try {
+    const dips = Array.isArray(req.body?.dips) ? [...new Set(req.body.dips.map(normalizeDip).filter(dip => /^\d{8}[A-Z]$/.test(dip)))] : [];
+    const notifs = memNotificaciones.filter(n => dips.includes(normalizeDip(n.dip)));
+    for (const dip of dips) {
+      const token = await registeredDeviceToken(req, dip);
+      if (!token) continue;
+      const v27 = await requestV27Mobile(`/api/mobil/notificaciones/${encodeURIComponent(dip)}`, token);
+      if (Array.isArray(v27)) notifs.push(...v27);
+    }
+    res.json([...new Map(notifs.map(n => [n._id || n.id, n])).values()]
+      .sort((a, b) => new Date(b.creadoEn || b.fecha || 0) - new Date(a.creadoEn || a.fecha || 0))
+      .slice(0, 100));
+  } catch (e) {
+    console.error('Error consultando notificaciones multi-identidad:', e?.message || e);
+    res.status(e?.message?.includes('PLACETAID_V27_MOBILE_API_FAILED_') ? 502 : 500).json({ error: 'No se pudieron consultar las notificaciones.' });
+  }
 });
 
 // ── POST /api/mobil/multi/documentos/:id/contenido — Contenido de documento ─
