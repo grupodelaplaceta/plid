@@ -187,27 +187,20 @@ const registroSchema = new mongoose.Schema({
   }
 });
 
-registroSchema.pre('save', function encryptIdentityBeforeSave(next) {
-  try {
-    const rawDip = this.get('dip', null, { getters: false });
-    if ((this.isNew || this.isModified('dip')) && rawDip && /^\d{8}[A-Z]$/i.test(rawDip)) {
-      this.set('dipEncrypted', encryptDip(rawDip.toUpperCase()));
-      this.set('dip', fingerprintDip(rawDip));
-    }
-    next();
-  } catch (error) { next(error); }
+registroSchema.pre('save', function encryptIdentityBeforeSave() {
+  const rawDip = this.get('dip', null, { getters: false });
+  if ((this.isNew || this.isModified('dip')) && rawDip && /^\d{8}[A-Z]$/i.test(rawDip)) {
+    this.set('dipEncrypted', encryptDip(rawDip.toUpperCase()));
+    this.set('dip', fingerprintDip(rawDip));
+  }
 });
 
-registroSchema.pre(/^find/, function protectAndLookupEncryptedDip(next) {
-  try {
-    this.setQuery(expandDipFilters(this.getFilter()));
-    this.select('+dipEncrypted');
-    next();
-  } catch (error) { next(error); }
+registroSchema.pre(/^find/, function protectAndLookupEncryptedDip() {
+  this.setQuery(expandDipFilters(this.getFilter()));
+  this.select('+dipEncrypted');
 });
-registroSchema.pre('exists', function lookupEncryptedDipForExists(next) {
-  try { this.setQuery(expandDipFilters(this.getFilter())); next(); }
-  catch (error) { next(error); }
+registroSchema.pre('exists', function lookupEncryptedDipForExists() {
+  this.setQuery(expandDipFilters(this.getFilter()));
 });
 registroSchema.post(/^find/, function revealEncryptedDip(result) {
   if (this.mongooseOptions().lean) revealLeanDip(result);
