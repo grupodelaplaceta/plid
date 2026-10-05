@@ -175,6 +175,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 const registrationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'registro_temporalmente_limitado' } });
 app.use('/api/registro', registrationLimiter);
+const legacyCredentialLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
 
 // ── MONGODB ───────────────────────────────────────────────────────────────────
 let isConnected = false;
@@ -462,6 +463,13 @@ function platformLabel(platform) {
 
 function normalizeDip(value) {
   return String(value || '').trim().toUpperCase().replace(/[\s-]+/g, '');
+}
+
+function hasValidV27DeviceKey(supplied) {
+  const expected = Buffer.from(String(process.env.PLACETAID_V27_DEVICE_KEY || ''));
+  const received = Buffer.from(String(supplied || ''));
+  if (expected.length < 32 || received.length !== expected.length) return false;
+  return crypto.timingSafeEqual(received, expected);
 }
 
 function normalizeEmail(value) {
@@ -2132,6 +2140,69 @@ async function requestV27Mobile(pathname, deviceToken, body) {
   if (!response.ok) throw new Error(`PLACETAID_V27_MOBILE_API_FAILED_${response.status}`)
   return payload
 }
+
+app.post('/api/internal/legacy/credentials/verify', legacyCredentialLimiter, async (req, res) => {
+  if (!hasValidV27DeviceKey(req.headers['x-placetaid-device-key'])) {
+    return res.status(401).json({ error: 'INVALID_DEVICE_LINKING_KEY' });
+  }
+  const dip = normalizeDip(req.body?.dip);
+  const password = String(req.body?.password || '');
+  if (!/^\d{8}[A-Z]$/.test(dip) || !password || password.length > 256) {
+    return res.status(400).json({ error: 'INVALID_CREDENTIALS' });
+  }
+  try {
+    const registro = await Registro.findOne({ dip }).select('dip placeid nombre apellidos empresaNombre correo fechaNacimiento rol activo bloqueado banned passwordHash').lean();
+    if (!registro) return res.status(404).json({ error: 'LEGACY_IDENTITY_NOT_FOUND' });
+    if (registro.bloqueado || registro.banned || registro.activo === false) {
+      return res.status(403).json({ error: 'LEGACY_IDENTITY_UNAVAILABLE' });
+    }
+    if (!registro.passwordHash) return res.status(409).json({ error: 'LEGACY_PASSWORD_NOT_SET' });
+    if (!await bcrypt.compare(password, registro.passwordHash)) {
+      return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+    }
+    res.json({
+      ok: true,
+      passwordHash: registro.passwordHash,
+      profile: {
+        placeid: registro.placeid || '',
+        nombre: [registro.nombre, registro.apellidos].filter(Boolean).join(' ').trim() || registro.empresaNombre || '',
+        correo: registro.correo || '',
+        fechaNacimiento: registro.fechaNacimiento || null,
+        rol: registro.rol || 'miembro',
+        activo: registro.activo !== false,
+        bloqueado: registro.bloqueado === true,
+        banned: registro.banned === true,
+      },
+    });
+  } catch (error) {
+    console.error('[PlacetaID legacy bridge] Credential verification failed:', error.message);
+    res.status(503).json({ error: 'LEGACY_CREDENTIAL_SERVICE_UNAVAILABLE' });
+  }
+});
+
+app.post('/api/internal/legacy/credentials/set', legacyCredentialLimiter, async (req, res) => {
+  if (!hasValidV27DeviceKey(req.headers['x-placetaid-device-key'])) {
+    return res.status(401).json({ error: 'INVALID_DEVICE_LINKING_KEY' });
+  }
+  const dip = normalizeDip(req.body?.dip);
+  const passwordHash = String(req.body?.passwordHash || '');
+  if (!/^\d{8}[A-Z]$/.test(dip) || !/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(passwordHash)) {
+    return res.status(400).json({ error: 'INVALID_CREDENTIAL_UPDATE' });
+  }
+  try {
+    const registro = await Registro.findOne({ dip });
+    if (!registro) return res.status(404).json({ error: 'LEGACY_IDENTITY_NOT_FOUND' });
+    registro.passwordHash = passwordHash;
+    registro.passwordChangedAt = new Date();
+    registro.passwordDefaultCifrado = undefined;
+    registro.intentosFallidos = 0;
+    await registro.save();
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[PlacetaID legacy bridge] Administrative password update failed:', error.message);
+    res.status(503).json({ error: 'LEGACY_PASSWORD_UPDATE_UNAVAILABLE' });
+  }
+});
 
 // Registrar dispositivo móvil asociado a un PlacetaID
 // Registrar dispositivo (móvil o PC)

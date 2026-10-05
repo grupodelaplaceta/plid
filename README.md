@@ -43,6 +43,8 @@ La migración controlada conserva las contraseñas existentes verificando sus ha
 
 Al registrar un dispositivo nuevo, PL26 verifica la contraseña antes de enlazar el perfil y el dispositivo con v27; no transfiere la contraseña. Para traer los métodos existentes en lote, configura `MONGO_URI`, `PLACETAID_V27_API_URL` y `PLACETAID_V27_DEVICE_KEY` en `.env`. Se migran dispositivos activos y autenticadores TOTP previamente verificados; se envían por HTTPS directamente al API interno v27, se almacenan los tokens como hashes y los secretos TOTP cifrados. No se transmiten contraseñas. Los dispositivos excluidos (inactivos o con datos inválidos) no se habilitan.
 
+Para el acceso temporal desde la pasarela, PL26 también ofrece una verificación interna de credenciales protegida por el mismo `PLACETAID_V27_DEVICE_KEY`. v27 envía DIP y contraseña solo por HTTPS; PL26 los compara con el hash de MongoDB y devuelve el hash y el perfil únicamente cuando la autenticación es correcta. No se registra ni se guarda la contraseña en claro.
+
 Primero revisa los conteos sin modificar nada:
 
 ```bash
